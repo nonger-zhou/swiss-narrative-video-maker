@@ -119,6 +119,8 @@ The initial skeleton uses only the Python standard library.
 ```powershell
 python -m snvm doctor
 python -m snvm init --output output
+python -m snvm prepare-source "C:\path\to\video.mp4"
+python -m snvm prepare-source "https://www.youtube.com/watch?v=..."
 ```
 
 If `python` is not available on Windows yet, install Python 3.11 or newer and make sure it is added to PATH.

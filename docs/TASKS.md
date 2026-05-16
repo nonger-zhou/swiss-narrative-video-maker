@@ -65,6 +65,10 @@ Scope:
 - use `yt-dlp` for YouTube
 - save or copy source as `output/source.mp4`
 
+Status:
+
+- done
+
 ### Task 004: Transcription
 
 Scope:
