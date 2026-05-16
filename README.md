@@ -112,3 +112,13 @@ Development is split into small task branches. Each task should:
 - work on Windows
 - give clear errors at each pipeline step
 
+## Current CLI Skeleton
+
+The initial skeleton uses only the Python standard library.
+
+```powershell
+python -m snvm doctor
+python -m snvm init --output output
+```
+
+If `python` is not available on Windows yet, install Python 3.11 or newer and make sure it is added to PATH.

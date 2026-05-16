@@ -32,11 +32,15 @@ Scope:
 
 Status:
 
-- in progress
+- done
 
-## Proposed Next Tasks
+## Task 002: Python Project Skeleton
 
-### Task 002: Python Project Skeleton
+Branch:
+
+```text
+codex/task-002-python-skeleton
+```
 
 Scope:
 
@@ -46,6 +50,12 @@ Scope:
 - add `.env.example`
 - add output directory handling
 - add basic logging and error messages
+
+Status:
+
+- done
+
+## Proposed Next Tasks
 
 ### Task 003: Source Input And Download
 
@@ -96,4 +106,3 @@ Scope:
 - compose scenes according to `scene_plan.json`
 - add voiceover and subtitles
 - output `final.mp4`
-
