@@ -365,8 +365,8 @@ def _html(payload: dict[str, Any]) -> str:
         <button id="backScene">上一段</button>
         <button id="replayScene">重播当前段</button>
         <button id="nextScene">下一段</button>
-        <button id="markLate" class="warn">中文滞后</button>
-        <button id="markEarly" class="warn">中文提前</button>
+        <button id="markLate" class="warn">字幕滞后</button>
+        <button id="markEarly" class="warn">字幕提前</button>
         <button id="markMismatch" class="warn">画面对不上</button>
         <button id="markMaterial" class="warn">需要补素材</button>
       </div>
@@ -437,8 +437,8 @@ def _html(payload: dict[str, Any]) -> str:
         <div class="grid">
           <label>问题类型
             <select id="issueType">
-              <option value="voiceover_late">中文滞后</option>
-              <option value="voiceover_early">中文提前</option>
+              <option value="voiceover_late">字幕滞后</option>
+              <option value="voiceover_early">字幕提前</option>
               <option value="visual_mismatch">画面对不上</option>
               <option value="needs_material">需要补素材</option>
               <option value="copy_too_long">文案太长</option>

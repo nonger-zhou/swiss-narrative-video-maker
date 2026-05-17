@@ -9,8 +9,8 @@ from .pipeline import initialize_project_output
 
 
 ISSUE_LABELS = {
-    "voiceover_late": "Chinese voiceover/subtitle is late",
-    "voiceover_early": "Chinese voiceover/subtitle is early",
+    "voiceover_late": "Chinese subtitle is late",
+    "voiceover_early": "Chinese subtitle is early",
     "visual_mismatch": "Visual does not match narration",
     "needs_material": "Needs additional or replacement material",
     "copy_too_long": "Chinese copy is too long",
@@ -109,8 +109,8 @@ def _recommended_actions(
                 "type": "adjust_alignment",
                 "priority": "high",
                 "suggestion": (
-                    "Chinese narration/subtitle appears late. Review the marked timestamp and "
-                    "consider moving this scene's Chinese cue earlier or shifting the scene boundary later."
+                    "Chinese subtitle appears late against the heard voiceover. Review the marked "
+                    "timestamp and consider moving this scene's subtitle cue earlier."
                 ),
             }
         )
@@ -120,8 +120,8 @@ def _recommended_actions(
                 "type": "adjust_alignment",
                 "priority": "high",
                 "suggestion": (
-                    "Chinese narration/subtitle appears early. Review the marked timestamp and "
-                    "consider moving this scene's Chinese cue later or shifting the scene boundary earlier."
+                    "Chinese subtitle appears early against the heard voiceover. Review the marked "
+                    "timestamp and consider moving this scene's subtitle cue later."
                 ),
             }
         )
