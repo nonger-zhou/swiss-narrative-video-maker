@@ -1,11 +1,19 @@
 import argparse
+import shutil
 import sys
 from pathlib import Path
 
+from .analysis import analyze_transcript
+from .composer import compose_draft_video, is_ffmpeg_available
 from .config import Settings, load_settings
 from .errors import SnvmError
 from .pipeline import initialize_project_output
+from .review import apply_scene_review, generate_scene_review
+from .scene_plan import generate_scene_plan
 from .source import prepare_source, save_source_metadata
+from .timing import generate_timing_plan
+from .transcription import is_faster_whisper_available, transcribe_source
+from .voiceover import generate_voiceover, is_edge_tts_available
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -20,6 +28,40 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "prepare-source":
         return run_prepare_source(args.input, args.output)
+
+    if args.command == "transcribe":
+        return run_transcribe(
+            args.source,
+            args.output,
+            args.model,
+            args.device,
+            args.compute_type,
+            args.language,
+        )
+
+    if args.command == "analyze":
+        return run_analyze(args.transcript, args.output)
+
+    if args.command == "scene-plan":
+        return run_scene_plan(args.translation, args.structure, args.output)
+
+    if args.command == "review":
+        return run_review(args.transcript, args.translation, args.scene_plan, args.output)
+
+    if args.command == "apply-review":
+        return run_apply_review(args.scene_plan, args.review, args.output)
+
+    if args.command == "timing-plan":
+        return run_timing_plan(args.scene_plan, args.output)
+
+    if args.command == "voiceover":
+        return run_voiceover(args.scene_plan, args.output, args.voice)
+
+    if args.command == "compose":
+        return run_compose(args.source, args.scene_plan, args.voiceover, args.output)
+
+    if args.command == "make-draft":
+        return run_make_draft(args.input, args.output)
 
     parser.print_help()
     return 0
@@ -57,6 +99,230 @@ def build_parser() -> argparse.ArgumentParser:
         help="YouTube URL or local mp4 path.",
     )
     source_parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("output"),
+        help="Directory for generated files.",
+    )
+
+    transcribe_parser = subparsers.add_parser(
+        "transcribe",
+        help="Transcribe output/source.mp4 and write output/transcript.json.",
+    )
+    transcribe_parser.add_argument(
+        "-s",
+        "--source",
+        type=Path,
+        default=None,
+        help="Video file to transcribe. Defaults to <output>/source.mp4.",
+    )
+    transcribe_parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("output"),
+        help="Directory for generated files.",
+    )
+    transcribe_parser.add_argument(
+        "-m",
+        "--model",
+        default=None,
+        help="faster-whisper model name. Defaults to WHISPER_MODEL from .env or 'small'.",
+    )
+    transcribe_parser.add_argument(
+        "--device",
+        default="cpu",
+        help="Device passed to faster-whisper, for example 'cpu' or 'cuda'.",
+    )
+    transcribe_parser.add_argument(
+        "--compute-type",
+        default="int8",
+        help="Compute type passed to faster-whisper, for example 'int8' or 'float16'.",
+    )
+    transcribe_parser.add_argument(
+        "--language",
+        default=None,
+        help="Optional source language code. Omit to let faster-whisper detect it.",
+    )
+
+    analyze_parser = subparsers.add_parser(
+        "analyze",
+        help="Translate transcript and analyze narrative structure with OpenAI.",
+    )
+    analyze_parser.add_argument(
+        "-t",
+        "--transcript",
+        type=Path,
+        default=None,
+        help="Transcript JSON. Defaults to <output>/transcript.json.",
+    )
+    analyze_parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("output"),
+        help="Directory for generated files.",
+    )
+
+    scene_plan_parser = subparsers.add_parser(
+        "scene-plan",
+        help="Generate output/scene_plan.json from translation and structure analysis.",
+    )
+    scene_plan_parser.add_argument(
+        "--translation",
+        type=Path,
+        default=None,
+        help="Translation JSON. Defaults to <output>/translation.json.",
+    )
+    scene_plan_parser.add_argument(
+        "--structure",
+        type=Path,
+        default=None,
+        help="Structure analysis JSON. Defaults to <output>/structure_analysis.json.",
+    )
+    scene_plan_parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("output"),
+        help="Directory for generated files.",
+    )
+
+    review_parser = subparsers.add_parser(
+        "review",
+        help="Generate human-editable scene review files.",
+    )
+    review_parser.add_argument(
+        "--transcript",
+        type=Path,
+        default=None,
+        help="Transcript JSON. Defaults to <output>/transcript.json.",
+    )
+    review_parser.add_argument(
+        "--translation",
+        type=Path,
+        default=None,
+        help="Translation JSON. Defaults to <output>/translation.json.",
+    )
+    review_parser.add_argument(
+        "--scene-plan",
+        type=Path,
+        default=None,
+        help="Scene plan JSON. Defaults to <output>/scene_plan.json.",
+    )
+    review_parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("output"),
+        help="Directory for generated files.",
+    )
+
+    apply_review_parser = subparsers.add_parser(
+        "apply-review",
+        help="Apply edited scene_review.json to create scene_plan.reviewed.json.",
+    )
+    apply_review_parser.add_argument(
+        "--scene-plan",
+        type=Path,
+        default=None,
+        help="Scene plan JSON. Defaults to <output>/scene_plan.json.",
+    )
+    apply_review_parser.add_argument(
+        "--review",
+        type=Path,
+        default=None,
+        help="Scene review JSON. Defaults to <output>/scene_review.json.",
+    )
+    apply_review_parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("output"),
+        help="Directory for generated files.",
+    )
+
+    timing_parser = subparsers.add_parser(
+        "timing-plan",
+        help="Generate per-scene timing recommendations before composition.",
+    )
+    timing_parser.add_argument(
+        "--scene-plan",
+        type=Path,
+        default=None,
+        help="Scene plan JSON. Defaults to <output>/scene_plan.reviewed.json if present, else <output>/scene_plan.json.",
+    )
+    timing_parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("output"),
+        help="Directory for generated files.",
+    )
+
+    voiceover_parser = subparsers.add_parser(
+        "voiceover",
+        help="Generate Chinese voiceover audio from output/scene_plan.json.",
+    )
+    voiceover_parser.add_argument(
+        "--scene-plan",
+        type=Path,
+        default=None,
+        help="Scene plan JSON. Defaults to <output>/scene_plan.json.",
+    )
+    voiceover_parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("output"),
+        help="Directory for generated files.",
+    )
+    voiceover_parser.add_argument(
+        "--voice",
+        default=None,
+        help="Edge TTS voice. Defaults to EDGE_TTS_VOICE from .env.",
+    )
+
+    compose_parser = subparsers.add_parser(
+        "compose",
+        help="Compose source video, voiceover, and subtitles into output/final.mp4.",
+    )
+    compose_parser.add_argument(
+        "--source",
+        type=Path,
+        default=None,
+        help="Source video. Defaults to <output>/source.mp4.",
+    )
+    compose_parser.add_argument(
+        "--scene-plan",
+        type=Path,
+        default=None,
+        help="Scene plan JSON. Defaults to <output>/scene_plan.json.",
+    )
+    compose_parser.add_argument(
+        "--voiceover",
+        type=Path,
+        default=None,
+        help="Voiceover mp3. Defaults to <output>/voiceover.mp3.",
+    )
+    compose_parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("output"),
+        help="Directory for generated files.",
+    )
+
+    draft_parser = subparsers.add_parser(
+        "make-draft",
+        help="Run the basic pipeline from source input to final draft video.",
+    )
+    draft_parser.add_argument(
+        "input",
+        help="YouTube URL or local mp4 path.",
+    )
+    draft_parser.add_argument(
         "-o",
         "--output",
         type=Path,
@@ -104,6 +370,188 @@ def run_prepare_source(input_value: str, output_dir: Path) -> int:
     return 0
 
 
+def run_transcribe(
+    source_path: Path | None,
+    output_dir: Path,
+    model_name: str | None,
+    device: str,
+    compute_type: str,
+    language: str | None,
+) -> int:
+    settings = load_settings()
+    source = source_path or output_dir / "source.mp4"
+    model = model_name or settings.whisper_model
+
+    try:
+        transcript_path = transcribe_source(
+            source,
+            output_dir,
+            model,
+            device=device,
+            compute_type=compute_type,
+            language=language,
+        )
+    except SnvmError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print("Transcript ready.")
+    print(f"- Source: {source}")
+    print(f"- Transcript: {transcript_path}")
+    return 0
+
+
+def run_analyze(transcript_path: Path | None, output_dir: Path) -> int:
+    settings = load_settings()
+    transcript = transcript_path or output_dir / "transcript.json"
+
+    try:
+        translation_path, structure_path = analyze_transcript(transcript, output_dir, settings)
+    except SnvmError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print("Analysis ready.")
+    print(f"- Translation: {translation_path}")
+    print(f"- Structure analysis: {structure_path}")
+    return 0
+
+
+def run_scene_plan(
+    translation_path: Path | None,
+    structure_path: Path | None,
+    output_dir: Path,
+) -> int:
+    translation = translation_path or output_dir / "translation.json"
+    structure = structure_path or output_dir / "structure_analysis.json"
+
+    try:
+        scene_plan_path = generate_scene_plan(translation, structure, output_dir)
+    except SnvmError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print("Scene plan ready.")
+    print(f"- Scene plan: {scene_plan_path}")
+    return 0
+
+
+def run_review(
+    transcript_path: Path | None,
+    translation_path: Path | None,
+    scene_plan_path: Path | None,
+    output_dir: Path,
+) -> int:
+    transcript = transcript_path or output_dir / "transcript.json"
+    translation = translation_path or output_dir / "translation.json"
+    scene_plan = scene_plan_path or output_dir / "scene_plan.json"
+
+    try:
+        paths = generate_scene_review(transcript, translation, scene_plan, output_dir)
+    except SnvmError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print("Scene review ready.")
+    print(f"- JSON: {paths.json_path}")
+    print(f"- Markdown: {paths.markdown_path}")
+    return 0
+
+
+def run_apply_review(
+    scene_plan_path: Path | None,
+    review_path: Path | None,
+    output_dir: Path,
+) -> int:
+    scene_plan = scene_plan_path or output_dir / "scene_plan.json"
+    review = review_path or output_dir / "scene_review.json"
+
+    try:
+        reviewed_scene_plan = apply_scene_review(scene_plan, review, output_dir)
+    except SnvmError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print("Reviewed scene plan ready.")
+    print(f"- Scene plan: {reviewed_scene_plan}")
+    return 0
+
+
+def run_timing_plan(scene_plan_path: Path | None, output_dir: Path) -> int:
+    default_reviewed = output_dir / "scene_plan.reviewed.json"
+    scene_plan = scene_plan_path or (
+        default_reviewed if default_reviewed.exists() else output_dir / "scene_plan.json"
+    )
+
+    try:
+        timing_plan = generate_timing_plan(scene_plan, output_dir)
+    except SnvmError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print("Timing plan ready.")
+    print(f"- Timing plan: {timing_plan}")
+    return 0
+
+
+def run_voiceover(scene_plan_path: Path | None, output_dir: Path, voice: str | None) -> int:
+    settings = load_settings()
+    scene_plan = scene_plan_path or output_dir / "scene_plan.json"
+    selected_voice = voice or settings.edge_tts_voice
+
+    try:
+        audio_path = generate_voiceover(scene_plan, output_dir, selected_voice)
+    except SnvmError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print("Voiceover ready.")
+    print(f"- Voice: {selected_voice}")
+    print(f"- Audio: {audio_path}")
+    return 0
+
+
+def run_compose(
+    source_path: Path | None,
+    scene_plan_path: Path | None,
+    voiceover_path: Path | None,
+    output_dir: Path,
+) -> int:
+    source = source_path or output_dir / "source.mp4"
+    scene_plan = scene_plan_path or output_dir / "scene_plan.json"
+    voiceover = voiceover_path or output_dir / "voiceover.mp3"
+
+    try:
+        final_path = compose_draft_video(source, scene_plan, voiceover, output_dir)
+    except SnvmError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print("Draft video ready.")
+    print(f"- Final: {final_path}")
+    return 0
+
+
+def run_make_draft(input_value: str, output_dir: Path) -> int:
+    steps = [
+        ("prepare-source", lambda: run_prepare_source(input_value, output_dir)),
+        ("transcribe", lambda: run_transcribe(None, output_dir, None, "cpu", "int8", None)),
+        ("analyze", lambda: run_analyze(None, output_dir)),
+        ("scene-plan", lambda: run_scene_plan(None, None, output_dir)),
+        ("voiceover", lambda: run_voiceover(None, output_dir, None)),
+        ("compose", lambda: run_compose(None, None, None, output_dir)),
+    ]
+
+    for name, step in steps:
+        print(f"Running step: {name}")
+        exit_code = step()
+        if exit_code != 0:
+            return exit_code
+
+    print("Basic draft pipeline complete.")
+    return 0
+
+
 def _print_settings(settings: Settings) -> None:
     print("Configuration")
     print(f"- OpenAI model: {settings.openai_model}")
@@ -113,6 +561,26 @@ def _print_settings(settings: Settings) -> None:
         print("- OpenAI API key: set")
     else:
         print("- OpenAI API key: missing")
+
+    if shutil.which("yt-dlp"):
+        print("- yt-dlp: available")
+    else:
+        print("- yt-dlp: missing")
+
+    if is_faster_whisper_available():
+        print("- faster-whisper: available")
+    else:
+        print("- faster-whisper: missing")
+
+    if is_edge_tts_available():
+        print("- edge-tts: available")
+    else:
+        print("- edge-tts: missing")
+
+    if is_ffmpeg_available():
+        print("- ffmpeg: available")
+    else:
+        print("- ffmpeg: missing")
 
 
 def _validate_source(source: str) -> int:

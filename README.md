@@ -114,13 +114,51 @@ Development is split into small task branches. Each task should:
 
 ## Current CLI Skeleton
 
-The initial skeleton uses only the Python standard library.
+The current basic pipeline is command-line first.
 
 ```powershell
 python -m snvm doctor
 python -m snvm init --output output
 python -m snvm prepare-source "C:\path\to\video.mp4"
 python -m snvm prepare-source "https://www.youtube.com/watch?v=..."
+python -m snvm transcribe
+python -m snvm analyze
+python -m snvm scene-plan
+python -m snvm review
+python -m snvm apply-review
+python -m snvm timing-plan
+python -m snvm voiceover
+python -m snvm compose
+python -m snvm make-draft "C:\path\to\video.mp4"
 ```
 
 If `python` is not available on Windows yet, install Python 3.11 or newer and make sure it is added to PATH.
+
+The first draft composer keeps the pipeline practical: it loops the prepared source video if needed, replaces the audio with generated Chinese voiceover, embeds subtitles, and writes `output/final.mp4`.
+
+## Optional Review Workflow
+
+After `scene-plan`, you can generate review files before voiceover:
+
+```powershell
+python -m snvm review
+```
+
+This writes:
+
+```text
+output/
+  scene_review.md
+  scene_review.json
+```
+
+The review shows each scene's original transcript, literal Chinese translation, rewritten Chinese voiceover, timing risk, and possible repetition warnings. Edit `scene_review.json` fields such as `user_note` and `final_voiceover`, then apply it:
+
+```powershell
+python -m snvm apply-review
+python -m snvm timing-plan
+python -m snvm voiceover --scene-plan output/scene_plan.reviewed.json
+python -m snvm compose --scene-plan output/scene_plan.reviewed.json
+```
+
+`timing-plan` writes `output/timing_plan.json`. It compares each scene's source duration with the estimated Chinese voiceover duration and recommends whether to keep timing, extend that scene locally, add explanatory visuals, add B-roll, or review/compress the copy.

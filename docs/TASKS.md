@@ -76,6 +76,10 @@ Scope:
 - integrate `faster-whisper`
 - output timestamped `transcript.json`
 
+Status:
+
+- done
+
 ### Task 005: OpenAI Translation And Structure Analysis
 
 Scope:
@@ -86,6 +90,10 @@ Scope:
 - enforce structure fidelity
 - produce visual action suggestions in plain language
 
+Status:
+
+- done
+
 ### Task 006: Scene Plan Generation
 
 Scope:
@@ -93,6 +101,10 @@ Scope:
 - generate `scene_plan.json`
 - validate required fields
 - keep visuals scene-by-scene rather than forcing replacement
+
+Status:
+
+- done
 
 ### Task 007: Voiceover
 
@@ -102,6 +114,10 @@ Scope:
 - generate Chinese voiceover mp3
 - store per-scene timing data if available
 
+Status:
+
+- done
+
 ### Task 008: Draft Video Composition
 
 Scope:
@@ -110,3 +126,33 @@ Scope:
 - compose scenes according to `scene_plan.json`
 - add voiceover and subtitles
 - output `final.mp4`
+
+Status:
+
+- done
+
+### Task 009: Human Review Layer
+
+Scope:
+
+- show original transcript, literal translation, and rewritten voiceover per scene
+- flag likely duplicate facts and over-expanded rewrite text
+- let the user edit a review JSON before regenerating voiceover
+- keep the existing automatic pipeline working unchanged
+
+Status:
+
+- done
+
+### Task 010: Scene Timing Plan
+
+Scope:
+
+- compare source scene duration with estimated Chinese voiceover duration
+- recommend per-scene timing actions instead of looping the whole video
+- flag scenes that should compress copy or add scene-specific visuals
+- keep existing compose behavior unchanged until a later per-scene composer task
+
+Status:
+
+- done

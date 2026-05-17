@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import subprocess
 from dataclasses import asdict, dataclass
@@ -6,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .errors import SnvmError
+from .certificates import apply_certifi_environment
 from .pipeline import initialize_project_output
 
 
@@ -71,7 +73,11 @@ def _prepare_youtube_source(url: str, output_dir: Path) -> SourceMetadata:
     target_path = output_dir / "source.mp4"
     command = [
         "yt-dlp",
+        "--compat-options",
+        "no-certifi",
         "--no-playlist",
+        "--force-overwrites",
+        "--no-continue",
         "-f",
         "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best",
         "--merge-output-format",
@@ -82,7 +88,8 @@ def _prepare_youtube_source(url: str, output_dir: Path) -> SourceMetadata:
     ]
 
     try:
-        subprocess.run(command, check=True)
+        apply_certifi_environment()
+        subprocess.run(command, check=True, env=os.environ.copy())
     except subprocess.CalledProcessError as exc:
         raise SnvmError(f"yt-dlp failed with exit code {exc.returncode}") from exc
 
@@ -103,4 +110,3 @@ def _is_url(value: str) -> bool:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
-

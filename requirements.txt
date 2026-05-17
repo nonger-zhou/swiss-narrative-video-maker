@@ -1,3 +1,7 @@
 # Runtime dependencies will be added task by task.
 # The initial CLI skeleton uses only the Python standard library.
 yt-dlp
+certifi
+truststore
+faster-whisper
+edge-tts
