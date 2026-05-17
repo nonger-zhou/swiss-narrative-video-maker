@@ -10,7 +10,7 @@ def read_json(path: Path) -> Any:
         raise SnvmError(f"Required JSON file does not exist: {path}")
 
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as exc:
         raise SnvmError(f"Invalid JSON in {path}: {exc}") from exc
     except OSError as exc:

@@ -127,6 +127,7 @@ python -m snvm scene-plan
 python -m snvm review
 python -m snvm apply-review
 python -m snvm timing-plan
+python -m snvm visual-replacements
 python -m snvm voiceover
 python -m snvm compose
 python -m snvm compose-scenes
@@ -172,6 +173,20 @@ python -m snvm compose-scenes --scene-plan output/scene_plan.reviewed.json
 ```
 
 This writes `output/final_scenes.mp4`. It keeps the older `compose` command available and unchanged.
+
+To prepare scene-level visual swaps, generate a replacement manifest:
+
+```powershell
+python -m snvm visual-replacements
+```
+
+This writes `output/visual_replacements.json` for scenes whose visual action suggests replacement, recreation, or extra explanatory visuals. When you have a replacement image or video, set that scene's `enabled` field to `true` and fill `asset_path`. Then compose with:
+
+```powershell
+python -m snvm compose-scenes --visual-replacements output/visual_replacements.json
+```
+
+Supported replacement assets are `mp4`, `mov`, `m4v`, `jpg`, `jpeg`, `png`, and `webp`. Enabled replacements are rendered only for their matching scene; other scenes keep the existing source-video timing behavior.
 
 To review alignment visually while watching the draft video, generate a local player:
 

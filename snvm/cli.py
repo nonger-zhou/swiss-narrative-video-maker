@@ -15,6 +15,7 @@ from .source import prepare_source, save_source_metadata
 from .timing import generate_timing_plan
 from .transcription import is_faster_whisper_available, transcribe_source
 from .voiceover import generate_voiceover, is_edge_tts_available
+from .visual_replacements import generate_visual_replacement_manifest
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -55,6 +56,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "timing-plan":
         return run_timing_plan(args.scene_plan, args.output)
 
+    if args.command == "visual-replacements":
+        return run_visual_replacements(args.scene_plan, args.output)
+
     if args.command == "voiceover":
         return run_voiceover(args.scene_plan, args.output, args.voice)
 
@@ -67,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
             args.scene_plan,
             args.timing_plan,
             args.voiceover,
+            args.visual_replacements,
             args.output,
         )
 
@@ -303,6 +308,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Edge TTS voice. Defaults to EDGE_TTS_VOICE from .env.",
     )
 
+    replacements_parser = subparsers.add_parser(
+        "visual-replacements",
+        help="Generate output/visual_replacements.json for scene-level visual swaps.",
+    )
+    replacements_parser.add_argument(
+        "--scene-plan",
+        type=Path,
+        default=None,
+        help="Scene plan JSON. Defaults to <output>/scene_plan.reviewed.json if present, else <output>/scene_plan.json.",
+    )
+    replacements_parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("output"),
+        help="Directory for generated files.",
+    )
+
     compose_parser = subparsers.add_parser(
         "compose",
         help="Compose source video, voiceover, and subtitles into output/final.mp4.",
@@ -360,6 +383,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="Voiceover mp3. Defaults to <output>/voiceover.mp3.",
+    )
+    scene_compose_parser.add_argument(
+        "--visual-replacements",
+        type=Path,
+        default=None,
+        help="Optional visual replacement manifest. Defaults to <output>/visual_replacements.json if present.",
     )
     scene_compose_parser.add_argument(
         "-o",
@@ -585,6 +614,23 @@ def run_timing_plan(scene_plan_path: Path | None, output_dir: Path) -> int:
     return 0
 
 
+def run_visual_replacements(scene_plan_path: Path | None, output_dir: Path) -> int:
+    default_reviewed = output_dir / "scene_plan.reviewed.json"
+    scene_plan = scene_plan_path or (
+        default_reviewed if default_reviewed.exists() else output_dir / "scene_plan.json"
+    )
+
+    try:
+        manifest_path = generate_visual_replacement_manifest(scene_plan, output_dir)
+    except SnvmError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print("Visual replacement manifest ready.")
+    print(f"- Manifest: {manifest_path}")
+    return 0
+
+
 def run_voiceover(scene_plan_path: Path | None, output_dir: Path, voice: str | None) -> int:
     settings = load_settings()
     scene_plan = scene_plan_path or output_dir / "scene_plan.json"
@@ -628,6 +674,7 @@ def run_compose_scenes(
     scene_plan_path: Path | None,
     timing_plan_path: Path | None,
     voiceover_path: Path | None,
+    visual_replacements_path: Path | None,
     output_dir: Path,
 ) -> int:
     source = source_path or output_dir / "source.mp4"
@@ -637,6 +684,10 @@ def run_compose_scenes(
     )
     timing_plan = timing_plan_path or output_dir / "timing_plan.json"
     voiceover = voiceover_path or output_dir / "voiceover.mp3"
+    default_replacements = output_dir / "visual_replacements.json"
+    visual_replacements = visual_replacements_path or (
+        default_replacements if default_replacements.exists() else None
+    )
 
     try:
         final_path = compose_scene_based_draft(
@@ -645,6 +696,7 @@ def run_compose_scenes(
             timing_plan,
             voiceover,
             output_dir,
+            visual_replacements,
         )
     except SnvmError as exc:
         print(f"Error: {exc}", file=sys.stderr)

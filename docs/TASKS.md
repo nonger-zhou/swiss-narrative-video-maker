@@ -195,3 +195,16 @@ Scope:
 Status:
 
 - done
+
+### Task 014: Visual Replacement Manifest
+
+Scope:
+
+- generate a scene-level `visual_replacements.json` from replacement recommendations
+- let the creator attach generated or sourced image/video assets to specific scenes
+- make `compose-scenes` render enabled replacement assets for their matching scene
+- keep existing scene composition behavior unchanged when no replacement is enabled
+
+Status:
+
+- done

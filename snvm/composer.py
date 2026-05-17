@@ -8,6 +8,7 @@ from .errors import SnvmError
 from .jsonio import read_json, write_json
 from .pipeline import initialize_project_output
 from .subtitles import write_scene_srt
+from .visual_replacements import load_visual_replacements, resolve_asset_path
 
 
 def is_ffmpeg_available() -> bool:
@@ -98,6 +99,7 @@ def compose_scene_based_draft(
     timing_plan_path: Path,
     voiceover_path: Path,
     output_dir: Path,
+    visual_replacements_path: Path | None = None,
 ) -> Path:
     if not source_path.exists():
         raise SnvmError(f"Source video does not exist: {source_path}")
@@ -115,6 +117,7 @@ def compose_scene_based_draft(
     timing_plan = read_json(timing_plan_path)
     scenes = _require_scenes(scene_plan)
     timing_by_scene_id = _timing_by_scene_id(timing_plan)
+    visual_replacements = load_visual_replacements(visual_replacements_path)
 
     work_dir = output_dir / "clips" / "scene_composer"
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -122,7 +125,18 @@ def compose_scene_based_draft(
     for index, scene in enumerate(scenes, start=1):
         timing = timing_by_scene_id.get(scene.get("scene_id"), {})
         clip_path = work_dir / f"{index:03d}_{scene.get('scene_id', f'scene_{index:03d}')}.mp4"
-        clip_record = _render_scene_clip(source_path, scene, timing, clip_path)
+        replacement = visual_replacements.get(str(scene.get("scene_id") or ""))
+        if replacement:
+            clip_record = _render_replacement_clip(
+                replacement,
+                visual_replacements_path,
+                output_dir,
+                scene,
+                timing,
+                clip_path,
+            )
+        else:
+            clip_record = _render_scene_clip(source_path, scene, timing, clip_path)
         clip_records.append(clip_record)
 
     concat_list_path = work_dir / "concat.txt"
@@ -187,6 +201,7 @@ def compose_scene_based_draft(
             "scene_plan_path": str(scene_plan_path),
             "timing_plan_path": str(timing_plan_path),
             "voiceover_path": str(voiceover_path),
+            "visual_replacements_path": str(visual_replacements_path) if visual_replacements_path else None,
             "subtitle_path": str(subtitle_path),
             "final_path": str(final_path),
             "generated_at": _now_iso(),
@@ -198,13 +213,15 @@ def compose_scene_based_draft(
                     "target_duration": record["target_duration"],
                     "render_action": record["render_action"],
                     "path": str(record["path"]),
+                    "replacement_asset": record.get("replacement_asset"),
+                    "replacement_mode": record.get("replacement_mode"),
                 }
                 for record in clip_records
             ],
             "note": (
                 "Scene-based draft composition uses timing_plan.json to extend each scene "
-                "locally. Extra visual material is not inserted yet; scenes that need new "
-                "material are held on their final frame as a conservative draft fallback."
+                "locally. If visual_replacements.json enables a scene replacement, that "
+                "scene is rendered from the provided image or video asset."
             ),
         },
     )
@@ -287,6 +304,57 @@ def _render_scene_clip(
     }
 
 
+def _render_replacement_clip(
+    replacement: dict[str, Any],
+    manifest_path: Path | None,
+    output_dir: Path,
+    scene: dict[str, Any],
+    timing: dict[str, Any],
+    output_path: Path,
+) -> dict[str, Any]:
+    asset_path = resolve_asset_path(str(replacement.get("asset_path") or ""), manifest_path, output_dir)
+    if not asset_path.exists():
+        raise SnvmError(f"Replacement asset does not exist: {asset_path}")
+
+    start = _float_value(scene.get("start_time"), 0.0)
+    end = _float_value(scene.get("end_time"), start)
+    source_duration = round(max(0.1, end - start), 3)
+    target_duration = round(
+        max(0.5, _float_value(timing.get("estimated_voiceover_duration"), source_duration)),
+        3,
+    )
+    timing_action = str(timing.get("timing_action") or "keep_timing")
+    suffix = asset_path.suffix.lower()
+
+    if suffix in {".mp4", ".mov", ".m4v"}:
+        command = _replacement_video_command(asset_path, replacement, target_duration, output_path)
+        render_action = "replacement_video"
+    elif suffix in {".jpg", ".jpeg", ".png", ".webp"}:
+        command = _replacement_image_command(asset_path, replacement, target_duration, output_path)
+        render_action = "replacement_image"
+    else:
+        raise SnvmError(
+            "Unsupported replacement asset type. Use mp4, mov, m4v, jpg, jpeg, png, or webp: "
+            f"{asset_path}"
+        )
+
+    _run_ffmpeg(command)
+    if not output_path.exists():
+        raise SnvmError(f"ffmpeg finished but did not create replacement clip {output_path}")
+
+    return {
+        "scene_id": scene.get("scene_id", ""),
+        "text": _scene_text(scene),
+        "timing_action": timing_action,
+        "source_duration": source_duration,
+        "target_duration": target_duration,
+        "render_action": render_action,
+        "path": output_path,
+        "replacement_asset": str(asset_path),
+        "replacement_mode": replacement.get("mode"),
+    }
+
+
 def _scene_input_command(
     source_path: Path,
     start: float,
@@ -344,8 +412,78 @@ def _scene_filter_command(
     ]
 
 
+def _replacement_video_command(
+    asset_path: Path,
+    replacement: dict[str, Any],
+    duration: float,
+    output_path: Path,
+) -> list[str]:
+    start_offset = max(0.0, _float_value(replacement.get("start_offset"), 0.0))
+    video_filter = _replacement_video_filter(replacement)
+    return [
+        "ffmpeg",
+        "-y",
+        "-stream_loop",
+        "-1",
+        "-ss",
+        f"{start_offset:.3f}",
+        "-t",
+        f"{duration:.3f}",
+        "-i",
+        str(asset_path),
+        "-an",
+        "-vf",
+        video_filter,
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-pix_fmt",
+        "yuv420p",
+        str(output_path),
+    ]
+
+
+def _replacement_image_command(
+    asset_path: Path,
+    replacement: dict[str, Any],
+    duration: float,
+    output_path: Path,
+) -> list[str]:
+    return [
+        "ffmpeg",
+        "-y",
+        "-loop",
+        "1",
+        "-t",
+        f"{duration:.3f}",
+        "-i",
+        str(asset_path),
+        "-an",
+        "-vf",
+        _replacement_video_filter(replacement),
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-pix_fmt",
+        "yuv420p",
+        str(output_path),
+    ]
+
+
 def _base_video_filter() -> str:
     return "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=25"
+
+
+def _replacement_video_filter(replacement: dict[str, Any]) -> str:
+    fit = str(replacement.get("fit") or "contain").lower()
+    if fit == "cover":
+        return (
+            "scale=1920:1080:force_original_aspect_ratio=increase,"
+            "crop=1920:1080,fps=25"
+        )
+    return _base_video_filter()
 
 
 def _render_action(timing_action: str, source_duration: float, target_duration: float) -> str:
