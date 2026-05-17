@@ -384,8 +384,8 @@ def _html(payload: dict[str, Any]) -> str:
         <div class="hint">可以先选中一句或一段文字，再点击下面的按钮。没有选中文字时，系统会使用当前 scene 的原文、忠实翻译和中文配音稿。</div>
         <div class="fact-actions">
           <button id="copyFactPrompt">复制核查 Prompt</button>
-          <button id="openChatGptFact" class="primary">ChatGPT 核查</button>
-          <button id="openPerplexityFact">Perplexity 核查</button>
+          <button id="openChatGptFact" class="primary">复制并打开 ChatGPT</button>
+          <button id="openPerplexityFact">复制并打开 Perplexity</button>
           <button id="openGoogleFact">Google 搜索原句</button>
         </div>
         <div class="status" id="factStatus"></div>
@@ -623,12 +623,20 @@ def _html(payload: dict[str, Any]) -> str:
       const scene = state.scenes[state.currentSceneIndex];
       if (!scene) return;
       const prompt = buildFactPrompt();
-      await copyText(prompt);
       const selected = selectedText();
       const shortQuery = selected || scene.voiceover || scene.literal_translation || scene.source_text || "";
       const url = factToolUrl(tool, prompt, shortQuery);
-      factStatusEl.textContent = "已复制 Prompt，并打开外部核查页面。";
-      window.open(url, "_blank", "noopener,noreferrer");
+      const externalWindow = window.open(url, "_blank");
+      const copied = await copyText(prompt);
+      if (externalWindow) {{
+        factStatusEl.textContent = copied
+          ? "已复制 Prompt，并打开外部页面。请在输入框里粘贴并发送。"
+          : "已打开外部页面，但复制失败；请改用复制按钮。";
+      }} else {{
+        factStatusEl.textContent = copied
+          ? "已复制 Prompt，但浏览器拦截了弹窗。请允许弹窗，或手动打开外部工具后粘贴。"
+          : "复制失败，且浏览器拦截了弹窗。";
+      }}
     }}
 
     function buildFactPrompt() {{
