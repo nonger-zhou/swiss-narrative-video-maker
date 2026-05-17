@@ -170,3 +170,16 @@ Scope:
 Status:
 
 - done
+
+### Task 012: Visual Alignment Review Player
+
+Scope:
+
+- generate a local HTML player for reviewing draft video alignment
+- show current scene metadata while the video plays
+- let the user mark voiceover/visual alignment issues at the current timestamp
+- export notes as JSON for later correction steps
+
+Status:
+
+- done

@@ -130,6 +130,7 @@ python -m snvm timing-plan
 python -m snvm voiceover
 python -m snvm compose
 python -m snvm compose-scenes
+python -m snvm review-player
 python -m snvm make-draft "C:\path\to\video.mp4"
 ```
 
@@ -171,3 +172,11 @@ python -m snvm compose-scenes --scene-plan output/scene_plan.reviewed.json
 ```
 
 This writes `output/final_scenes.mp4`. It keeps the older `compose` command available and unchanged.
+
+To review alignment visually while watching the draft video, generate a local player:
+
+```powershell
+python -m snvm review-player
+```
+
+Open `output/review_player.html` in a browser. The page lets you play the video, jump scene by scene, mark alignment issues, and export `alignment_notes.json`.

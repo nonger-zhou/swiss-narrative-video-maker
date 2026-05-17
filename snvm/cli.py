@@ -9,6 +9,7 @@ from .config import Settings, load_settings
 from .errors import SnvmError
 from .pipeline import initialize_project_output
 from .review import apply_scene_review, generate_scene_review
+from .review_player import generate_review_player
 from .scene_plan import generate_scene_plan
 from .source import prepare_source, save_source_metadata
 from .timing import generate_timing_plan
@@ -68,6 +69,9 @@ def main(argv: list[str] | None = None) -> int:
             args.voiceover,
             args.output,
         )
+
+    if args.command == "review-player":
+        return run_review_player(args.video, args.scene_plan, args.timing_plan, args.output)
 
     if args.command == "make-draft":
         return run_make_draft(args.input, args.output)
@@ -359,6 +363,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory for generated files.",
     )
 
+    review_player_parser = subparsers.add_parser(
+        "review-player",
+        help="Generate a local HTML video player for alignment issue marking.",
+    )
+    review_player_parser.add_argument(
+        "--video",
+        type=Path,
+        default=None,
+        help="Video to review. Defaults to <output>/final_scenes.mp4 if present, else <output>/final.mp4.",
+    )
+    review_player_parser.add_argument(
+        "--scene-plan",
+        type=Path,
+        default=None,
+        help="Scene plan JSON. Defaults to <output>/scene_plan.reviewed.json if present, else <output>/scene_plan.json.",
+    )
+    review_player_parser.add_argument(
+        "--timing-plan",
+        type=Path,
+        default=None,
+        help="Timing plan JSON. Defaults to <output>/timing_plan.json if present.",
+    )
+    review_player_parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("output"),
+        help="Directory for generated files.",
+    )
+
     draft_parser = subparsers.add_parser(
         "make-draft",
         help="Run the basic pipeline from source input to final draft video.",
@@ -606,6 +640,32 @@ def run_compose_scenes(
 
     print("Scene-based draft video ready.")
     print(f"- Final: {final_path}")
+    return 0
+
+
+def run_review_player(
+    video_path: Path | None,
+    scene_plan_path: Path | None,
+    timing_plan_path: Path | None,
+    output_dir: Path,
+) -> int:
+    default_scene_video = output_dir / "final_scenes.mp4"
+    video = video_path or (default_scene_video if default_scene_video.exists() else output_dir / "final.mp4")
+    default_reviewed = output_dir / "scene_plan.reviewed.json"
+    scene_plan = scene_plan_path or (
+        default_reviewed if default_reviewed.exists() else output_dir / "scene_plan.json"
+    )
+    default_timing = output_dir / "timing_plan.json"
+    timing_plan = timing_plan_path or (default_timing if default_timing.exists() else None)
+
+    try:
+        html_path = generate_review_player(video, scene_plan, timing_plan, output_dir)
+    except SnvmError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print("Review player ready.")
+    print(f"- HTML: {html_path}")
     return 0
 
 
