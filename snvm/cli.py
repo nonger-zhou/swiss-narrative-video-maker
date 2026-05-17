@@ -10,6 +10,7 @@ from .errors import SnvmError
 from .pipeline import initialize_project_output
 from .review import apply_scene_review, generate_scene_review
 from .review_player import generate_review_player
+from .revision_plan import generate_revision_plan
 from .scene_plan import generate_scene_plan
 from .source import prepare_source, save_source_metadata
 from .timing import generate_timing_plan
@@ -81,6 +82,14 @@ def main(argv: list[str] | None = None) -> int:
             args.scene_plan,
             args.timing_plan,
             args.review,
+            args.output,
+        )
+
+    if args.command == "revision-plan":
+        return run_revision_plan(
+            args.notes,
+            args.scene_plan,
+            args.timing_plan,
             args.output,
         )
 
@@ -434,6 +443,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory for generated files.",
     )
 
+    revision_parser = subparsers.add_parser(
+        "revision-plan",
+        help="Summarize exported alignment_notes.json into a scene revision plan.",
+    )
+    revision_parser.add_argument(
+        "--notes",
+        type=Path,
+        default=None,
+        help="Alignment notes JSON. Defaults to <output>/alignment_notes.json.",
+    )
+    revision_parser.add_argument(
+        "--scene-plan",
+        type=Path,
+        default=None,
+        help="Scene plan JSON. Defaults to <output>/scene_plan.reviewed.json if present, else <output>/scene_plan.json.",
+    )
+    revision_parser.add_argument(
+        "--timing-plan",
+        type=Path,
+        default=None,
+        help="Timing plan JSON. Defaults to <output>/timing_plan.json if present.",
+    )
+    revision_parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("output"),
+        help="Directory for generated files.",
+    )
+
     draft_parser = subparsers.add_parser(
         "make-draft",
         help="Run the basic pipeline from source input to final draft video.",
@@ -733,6 +772,32 @@ def run_review_player(
 
     print("Review player ready.")
     print(f"- HTML: {html_path}")
+    return 0
+
+
+def run_revision_plan(
+    notes_path: Path | None,
+    scene_plan_path: Path | None,
+    timing_plan_path: Path | None,
+    output_dir: Path,
+) -> int:
+    notes = notes_path or output_dir / "alignment_notes.json"
+    default_reviewed = output_dir / "scene_plan.reviewed.json"
+    scene_plan = scene_plan_path or (
+        default_reviewed if default_reviewed.exists() else output_dir / "scene_plan.json"
+    )
+    default_timing = output_dir / "timing_plan.json"
+    timing_plan = timing_plan_path or (default_timing if default_timing.exists() else None)
+
+    try:
+        json_path, markdown_path = generate_revision_plan(notes, scene_plan, timing_plan, output_dir)
+    except SnvmError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print("Revision plan ready.")
+    print(f"- JSON: {json_path}")
+    print(f"- Markdown: {markdown_path}")
     return 0
 
 

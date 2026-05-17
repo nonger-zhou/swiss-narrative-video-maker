@@ -132,6 +132,7 @@ python -m snvm voiceover
 python -m snvm compose
 python -m snvm compose-scenes
 python -m snvm review-player
+python -m snvm revision-plan
 python -m snvm make-draft "C:\path\to\video.mp4"
 ```
 
@@ -203,3 +204,19 @@ The player also shows a three-column text comparison for the current scene:
 - final Chinese voiceover
 
 For fact checking, select any sentence in the player and use the fact-check buttons. The player can copy a prepared verification prompt or open ChatGPT, Perplexity, or Google with the current scene context. The prompt asks for source links, publication year, data definitions, and safer rewrite suggestions when a claim is too absolute.
+
+After exporting `alignment_notes.json` from the player, generate a revision plan:
+
+```powershell
+python -m snvm revision-plan
+```
+
+This writes:
+
+```text
+output/
+  revision_plan.json
+  revision_plan.md
+```
+
+The revision plan groups notes by scene and recommends whether to adjust timing, review scene boundaries, compress copy, deduplicate facts, or add replacement visuals. It is advisory and does not modify the scene plan automatically.

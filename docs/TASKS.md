@@ -221,3 +221,16 @@ Scope:
 Status:
 
 - done
+
+### Task 016: Alignment Revision Plan
+
+Scope:
+
+- read `alignment_notes.json` exported from the review player
+- group marked issues by scene
+- generate `revision_plan.json` and `revision_plan.md`
+- recommend next edits without automatically changing scene plans or copy
+
+Status:
+
+- done
