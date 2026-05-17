@@ -201,3 +201,5 @@ The player also shows a three-column text comparison for the current scene:
 - original transcript
 - literal Chinese translation
 - final Chinese voiceover
+
+For fact checking, select any sentence in the player and use the fact-check buttons. The player can copy a prepared verification prompt or open ChatGPT, Perplexity, or Google with the current scene context. The prompt asks for source links, publication year, data definitions, and safer rewrite suggestions when a claim is too absolute.

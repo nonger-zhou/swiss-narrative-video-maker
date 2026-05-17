@@ -208,3 +208,16 @@ Scope:
 Status:
 
 - done
+
+### Task 015: Fact Check Shortcuts
+
+Scope:
+
+- add fact-check shortcuts to the visual review player
+- build prompts from selected text or the current scene's transcript, literal translation, and voiceover
+- copy the prompt and open external research tools with the current claim context
+- keep fact checking user-driven instead of generating an internal report
+
+Status:
+
+- done

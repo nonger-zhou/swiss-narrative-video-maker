@@ -280,6 +280,17 @@ def _html(payload: dict[str, Any]) -> str:
       flex-direction: column;
       gap: 6px;
     }}
+    .fact-actions {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }}
+    .hint {{
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }}
     .warning {{
       color: #7c2d12;
       background: #fff7ed;
@@ -368,6 +379,17 @@ def _html(payload: dict[str, Any]) -> str:
           </div>
         </div>
       </section>
+      <section class="panel">
+        <div class="label">事实核查</div>
+        <div class="hint">可以先选中一句或一段文字，再点击下面的按钮。没有选中文字时，系统会使用当前 scene 的原文、忠实翻译和中文配音稿。</div>
+        <div class="fact-actions">
+          <button id="copyFactPrompt">复制核查 Prompt</button>
+          <button id="openChatGptFact" class="primary">ChatGPT 核查</button>
+          <button id="openPerplexityFact">Perplexity 核查</button>
+          <button id="openGoogleFact">Google 搜索原句</button>
+        </div>
+        <div class="status" id="factStatus"></div>
+      </section>
       <section class="panel grid">
         <div>
           <div class="label">Timing Action</div>
@@ -444,6 +466,7 @@ def _html(payload: dict[str, Any]) -> str:
     const visualActionEl = document.getElementById("visualAction");
     const recommendationEl = document.getElementById("recommendation");
     const warningsEl = document.getElementById("warnings");
+    const factStatusEl = document.getElementById("factStatus");
     const issueTypeEl = document.getElementById("issueType");
     const severityEl = document.getElementById("severity");
     const noteTextEl = document.getElementById("noteText");
@@ -478,6 +501,10 @@ def _html(payload: dict[str, Any]) -> str:
     document.getElementById("markEarly").addEventListener("click", () => quickNote("voiceover_early"));
     document.getElementById("markMismatch").addEventListener("click", () => quickNote("visual_mismatch"));
     document.getElementById("markMaterial").addEventListener("click", () => quickNote("needs_material"));
+    document.getElementById("copyFactPrompt").addEventListener("click", () => copyFactPrompt());
+    document.getElementById("openChatGptFact").addEventListener("click", () => openFactTool("chatgpt"));
+    document.getElementById("openPerplexityFact").addEventListener("click", () => openFactTool("perplexity"));
+    document.getElementById("openGoogleFact").addEventListener("click", () => openFactTool("google"));
 
     function sceneIndexAt(time) {{
       if (!state.scenes.length) return 0;
@@ -584,6 +611,82 @@ def _html(payload: dict[str, Any]) -> str:
       link.download = "alignment_notes.json";
       link.click();
       URL.revokeObjectURL(link.href);
+    }}
+
+    async function copyFactPrompt() {{
+      const prompt = buildFactPrompt();
+      const copied = await copyText(prompt);
+      factStatusEl.textContent = copied ? "已复制核查 Prompt。" : "复制失败，请手动复制。";
+    }}
+
+    async function openFactTool(tool) {{
+      const scene = state.scenes[state.currentSceneIndex];
+      if (!scene) return;
+      const prompt = buildFactPrompt();
+      await copyText(prompt);
+      const selected = selectedText();
+      const shortQuery = selected || scene.voiceover || scene.literal_translation || scene.source_text || "";
+      const url = factToolUrl(tool, prompt, shortQuery);
+      factStatusEl.textContent = "已复制 Prompt，并打开外部核查页面。";
+      window.open(url, "_blank", "noopener,noreferrer");
+    }}
+
+    function buildFactPrompt() {{
+      const scene = state.scenes[state.currentSceneIndex] || {{}};
+      const selected = selectedText();
+      const target = selected || [
+        scene.source_text ? `原文 transcript：\\n${{scene.source_text}}` : "",
+        scene.literal_translation ? `忠实中文翻译：\\n${{scene.literal_translation}}` : "",
+        scene.voiceover ? `中文配音稿：\\n${{scene.voiceover}}` : ""
+      ].filter(Boolean).join("\\n\\n");
+      return [
+        "请帮我核查下面这段视频文案里的事实描述，不只核查数字，也包括排名、年份、比较关系、因果说法、政策、税费、经济、社会描述等。",
+        "",
+        "请输出：",
+        "1. 哪些具体 claim 需要核查；",
+        "2. 每个 claim 的结论：可信 / 可能过时 / 证据不足 / 有争议 / 错误；",
+        "3. 原始资料或权威来源链接，优先使用 OECD、World Bank、官方统计局、政府网站、学术或主流媒体来源；",
+        "4. 来源对应的年份、口径和适用范围；",
+        "5. 如果原句太绝对，请给一个更稳妥的中文改写建议。",
+        "",
+        `Scene：${{scene.scene_id || "unknown"}}`,
+        `时间：${{fmt(scene.start_time)}} - ${{fmt(scene.end_time)}}`,
+        "",
+        "待核查文本：",
+        target || "(当前 scene 没有可用文本)"
+      ].join("\\n");
+    }}
+
+    function factToolUrl(tool, prompt, shortQuery) {{
+      if (tool === "chatgpt") {{
+        return `https://chatgpt.com/?q=${{encodeURIComponent(prompt)}}`;
+      }}
+      if (tool === "perplexity") {{
+        return `https://www.perplexity.ai/search?q=${{encodeURIComponent(prompt)}}`;
+      }}
+      return `https://www.google.com/search?q=${{encodeURIComponent(shortQuery)}}`;
+    }}
+
+    async function copyText(text) {{
+      try {{
+        await navigator.clipboard.writeText(text);
+        return true;
+      }} catch (error) {{
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        const copied = document.execCommand("copy");
+        document.body.removeChild(textarea);
+        return copied;
+      }}
+    }}
+
+    function selectedText() {{
+      return String(window.getSelection?.().toString() || "").trim();
     }}
 
     function fmt(value) {{
