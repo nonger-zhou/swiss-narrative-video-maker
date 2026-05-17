@@ -386,9 +386,9 @@ def _html(payload: dict[str, Any]) -> str:
         <div class="hint">可以先选中一句或一段文字，再点击下面的按钮。没有选中文字时，系统会使用当前 scene 的原文、忠实翻译和中文配音稿。</div>
         <div class="fact-actions">
           <button id="copyFactPrompt">复制核查 Prompt</button>
-          <a id="openChatGptFact" class="button-link primary" href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">复制并打开 ChatGPT</a>
-          <a id="openPerplexityFact" class="button-link" href="https://www.perplexity.ai/" target="_blank" rel="noopener noreferrer">复制并打开 Perplexity</a>
-          <a id="openGoogleFact" class="button-link" href="https://www.google.com/" target="_blank" rel="noopener noreferrer">Google 搜索原句</a>
+          <a id="openChatGptFact" class="button-link primary" href="https://chatgpt.com/">复制并打开 ChatGPT</a>
+          <a id="openPerplexityFact" class="button-link" href="https://www.perplexity.ai/">复制并打开 Perplexity</a>
+          <a id="openGoogleFact" class="button-link" href="https://www.google.com/">Google 搜索原句</a>
         </div>
         <div class="status" id="factStatus"></div>
       </section>
@@ -631,8 +631,8 @@ def _html(payload: dict[str, Any]) -> str:
       event.currentTarget.href = url;
       const copied = await copyText(prompt);
       factStatusEl.textContent = copied
-        ? "已复制 Prompt。新页面打开后，请在输入框里粘贴并发送。"
-        : "新页面会打开，但复制失败；请改用复制按钮。";
+        ? "已复制 Prompt。跳转后，请在输入框里粘贴并发送；返回播放器可按浏览器返回。"
+        : "即将跳转，但复制失败；请返回后改用复制按钮。";
     }}
 
     function buildFactPrompt() {{
