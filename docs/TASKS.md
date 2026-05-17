@@ -183,3 +183,15 @@ Scope:
 Status:
 
 - done
+
+### Task 013: Review Player Text Comparison
+
+Scope:
+
+- show original transcript, literal Chinese translation, and final Chinese voiceover in the visual review player
+- include AI review warnings in the player
+- export alignment notes with the three text layers attached
+
+Status:
+
+- done

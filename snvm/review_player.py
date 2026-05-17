@@ -13,6 +13,7 @@ def generate_review_player(
     video_path: Path,
     scene_plan_path: Path,
     timing_plan_path: Path | None,
+    review_path: Path | None,
     output_dir: Path,
 ) -> Path:
     if not video_path.exists():
@@ -23,12 +24,14 @@ def generate_review_player(
     initialize_project_output(output_dir)
     scene_plan = read_json(scene_plan_path)
     timing_plan = read_json(timing_plan_path) if timing_plan_path and timing_plan_path.exists() else None
+    review = read_json(review_path) if review_path and review_path.exists() else None
     payload = {
         "generated_at": _now_iso(),
         "video": _browser_path(video_path, output_dir),
         "scene_plan": str(scene_plan_path),
         "timing_plan": str(timing_plan_path) if timing_plan_path else None,
-        "scenes": _player_scenes(scene_plan, timing_plan),
+        "review": str(review_path) if review_path else None,
+        "scenes": _player_scenes(scene_plan, timing_plan, review),
     }
 
     payload_path = write_json(output_dir / "review_player_data.json", payload)
@@ -37,12 +40,19 @@ def generate_review_player(
     return html_path
 
 
-def _player_scenes(scene_plan: Any, timing_plan: Any | None) -> list[dict[str, Any]]:
+def _player_scenes(
+    scene_plan: Any,
+    timing_plan: Any | None,
+    review: Any | None,
+) -> list[dict[str, Any]]:
     scenes = _require_scenes(scene_plan)
     timing_by_scene = _timing_by_scene_id(timing_plan)
+    review_by_scene = _review_by_scene_id(review)
     player_scenes = []
     for scene in scenes:
         timing = timing_by_scene.get(str(scene.get("scene_id")), {})
+        review_entry = review_by_scene.get(str(scene.get("scene_id")), {})
+        voiceover = _scene_text(scene, review_entry)
         player_scenes.append(
             {
                 "scene_id": scene.get("scene_id", ""),
@@ -51,8 +61,19 @@ def _player_scenes(scene_plan: Any, timing_plan: Any | None) -> list[dict[str, A
                 "end_time": scene.get("end_time"),
                 "source_summary": scene.get("source_summary", ""),
                 "narrative_role": scene.get("narrative_role", ""),
-                "voiceover": _scene_text(scene),
+                "source_text": review_entry.get("source_text", ""),
+                "literal_translation": review_entry.get(
+                    "literal_translation",
+                    scene.get("translated_text", ""),
+                ),
+                "rewritten_voiceover": review_entry.get(
+                    "rewritten_voiceover",
+                    scene.get("rewritten_voiceover", ""),
+                ),
+                "final_voiceover": review_entry.get("final_voiceover", voiceover),
+                "voiceover": voiceover,
                 "translated_text": scene.get("translated_text", ""),
+                "ai_warnings": review_entry.get("ai_warnings", []),
                 "visual_action": scene.get("visual_action", ""),
                 "timing_action": timing.get("timing_action", ""),
                 "recommendation": timing.get("recommendation", ""),
@@ -79,7 +100,21 @@ def _timing_by_scene_id(timing_plan: Any | None) -> dict[str, dict[str, Any]]:
     }
 
 
-def _scene_text(scene: dict[str, Any]) -> str:
+def _review_by_scene_id(review: Any | None) -> dict[str, dict[str, Any]]:
+    if not isinstance(review, dict) or not isinstance(review.get("scenes"), list):
+        return {}
+    return {
+        str(scene.get("scene_id")): scene
+        for scene in review["scenes"]
+        if isinstance(scene, dict)
+    }
+
+
+def _scene_text(scene: dict[str, Any], review_entry: dict[str, Any] | None = None) -> str:
+    if review_entry:
+        reviewed = str(review_entry.get("final_voiceover") or "").strip()
+        if reviewed:
+            return reviewed
     return str(
         scene.get("reviewed_voiceover")
         or scene.get("final_voiceover")
@@ -219,6 +254,39 @@ def _html(payload: dict[str, Any]) -> str:
       grid-template-columns: 1fr 1fr;
       gap: 10px;
     }}
+    .compare-grid {{
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }}
+    .compare-card {{
+      border: 1px solid var(--line);
+      background: #fffdf8;
+      padding: 10px;
+      min-height: 150px;
+    }}
+    .current-subtitle {{
+      font-size: 20px;
+      line-height: 1.5;
+      font-weight: 650;
+      padding: 12px;
+      background: #1d2528;
+      color: #fffaf2;
+      margin-top: 12px;
+      min-height: 64px;
+    }}
+    .warnings {{
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }}
+    .warning {{
+      color: #7c2d12;
+      background: #fff7ed;
+      border: 1px solid #fdba74;
+      padding: 7px;
+      font-size: 13px;
+    }}
     textarea {{
       width: 100%;
       min-height: 90px;
@@ -254,6 +322,7 @@ def _html(payload: dict[str, Any]) -> str:
     }}
     @media (max-width: 980px) {{
       main {{ grid-template-columns: 1fr; }}
+      .compare-grid {{ grid-template-columns: 1fr; }}
       .player {{ border-right: 0; border-bottom: 1px solid var(--line); }}
     }}
   </style>
@@ -275,6 +344,7 @@ def _html(payload: dict[str, Any]) -> str:
         <button id="markMismatch" class="warn">画面对不上</button>
         <button id="markMaterial" class="warn">需要补素材</button>
       </div>
+      <div class="current-subtitle" id="currentSubtitle">—</div>
     </section>
     <aside class="side">
       <section class="panel">
@@ -282,8 +352,21 @@ def _html(payload: dict[str, Any]) -> str:
         <div class="meta" id="sceneMeta">—</div>
       </section>
       <section class="panel">
-        <div class="label">中文配音</div>
-        <div class="text-block" id="voiceover">—</div>
+        <div class="label">三栏对照</div>
+        <div class="compare-grid">
+          <div class="compare-card">
+            <div class="label">原始德语 Transcript</div>
+            <div class="text-block" id="sourceText">—</div>
+          </div>
+          <div class="compare-card">
+            <div class="label">忠实中文翻译</div>
+            <div class="text-block" id="literalTranslation">—</div>
+          </div>
+          <div class="compare-card">
+            <div class="label">最终中文配音</div>
+            <div class="text-block" id="voiceover">—</div>
+          </div>
+        </div>
       </section>
       <section class="panel grid">
         <div>
@@ -298,6 +381,10 @@ def _html(payload: dict[str, Any]) -> str:
       <section class="panel">
         <div class="label">Recommendation</div>
         <div class="text-block" id="recommendation">—</div>
+      </section>
+      <section class="panel">
+        <div class="label">AI Warnings</div>
+        <div class="warnings" id="warnings">—</div>
       </section>
       <section class="panel">
         <div class="label">新增标记</div>
@@ -349,10 +436,14 @@ def _html(payload: dict[str, Any]) -> str:
     const statusEl = document.getElementById("status");
     const sceneIdEl = document.getElementById("sceneId");
     const sceneMetaEl = document.getElementById("sceneMeta");
+    const currentSubtitleEl = document.getElementById("currentSubtitle");
+    const sourceTextEl = document.getElementById("sourceText");
+    const literalTranslationEl = document.getElementById("literalTranslation");
     const voiceoverEl = document.getElementById("voiceover");
     const timingActionEl = document.getElementById("timingAction");
     const visualActionEl = document.getElementById("visualAction");
     const recommendationEl = document.getElementById("recommendation");
+    const warningsEl = document.getElementById("warnings");
     const issueTypeEl = document.getElementById("issueType");
     const severityEl = document.getElementById("severity");
     const noteTextEl = document.getElementById("noteText");
@@ -414,10 +505,28 @@ def _html(payload: dict[str, Any]) -> str:
       if (!scene) return;
       sceneIdEl.textContent = scene.scene_id || "—";
       sceneMetaEl.textContent = `${{fmt(scene.start_time)}} - ${{fmt(scene.end_time)}} · source segment ${{scene.source_segment_id ?? "—"}} · ${{scene.narrative_role || "no role"}}`;
+      currentSubtitleEl.textContent = scene.voiceover || "—";
+      sourceTextEl.textContent = scene.source_text || "—";
+      literalTranslationEl.textContent = scene.literal_translation || scene.translated_text || "—";
       voiceoverEl.textContent = scene.voiceover || "—";
       timingActionEl.textContent = scene.timing_action || "—";
       visualActionEl.textContent = scene.visual_action || "—";
       recommendationEl.textContent = scene.recommendation || "—";
+      renderWarnings(scene.ai_warnings || []);
+    }}
+
+    function renderWarnings(warnings) {{
+      warningsEl.innerHTML = "";
+      if (!warnings.length) {{
+        warningsEl.textContent = "No warning for this scene.";
+        return;
+      }}
+      warnings.forEach(warning => {{
+        const item = document.createElement("div");
+        item.className = "warning";
+        item.textContent = `${{warning.type || "warning"}}: ${{warning.message || ""}}`;
+        warningsEl.appendChild(item);
+      }});
     }}
 
     function quickNote(type) {{
@@ -435,6 +544,8 @@ def _html(payload: dict[str, Any]) -> str:
         issue_type: issueTypeEl.value,
         severity: severityEl.value,
         note: noteTextEl.value.trim(),
+        source_text: scene.source_text || "",
+        literal_translation: scene.literal_translation || "",
         voiceover: scene.voiceover || "",
         timing_action: scene.timing_action || "",
         visual_action: scene.visual_action || ""

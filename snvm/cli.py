@@ -71,7 +71,13 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     if args.command == "review-player":
-        return run_review_player(args.video, args.scene_plan, args.timing_plan, args.output)
+        return run_review_player(
+            args.video,
+            args.scene_plan,
+            args.timing_plan,
+            args.review,
+            args.output,
+        )
 
     if args.command == "make-draft":
         return run_make_draft(args.input, args.output)
@@ -386,6 +392,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Timing plan JSON. Defaults to <output>/timing_plan.json if present.",
     )
     review_player_parser.add_argument(
+        "--review",
+        type=Path,
+        default=None,
+        help="Scene review JSON. Defaults to <output>/scene_review.json if present.",
+    )
+    review_player_parser.add_argument(
         "-o",
         "--output",
         type=Path,
@@ -647,6 +659,7 @@ def run_review_player(
     video_path: Path | None,
     scene_plan_path: Path | None,
     timing_plan_path: Path | None,
+    review_path: Path | None,
     output_dir: Path,
 ) -> int:
     default_scene_video = output_dir / "final_scenes.mp4"
@@ -657,9 +670,11 @@ def run_review_player(
     )
     default_timing = output_dir / "timing_plan.json"
     timing_plan = timing_plan_path or (default_timing if default_timing.exists() else None)
+    default_review = output_dir / "scene_review.json"
+    review = review_path or (default_review if default_review.exists() else None)
 
     try:
-        html_path = generate_review_player(video, scene_plan, timing_plan, output_dir)
+        html_path = generate_review_player(video, scene_plan, timing_plan, review, output_dir)
     except SnvmError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1

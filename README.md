@@ -180,3 +180,9 @@ python -m snvm review-player
 ```
 
 Open `output/review_player.html` in a browser. The page lets you play the video, jump scene by scene, mark alignment issues, and export `alignment_notes.json`.
+
+The player also shows a three-column text comparison for the current scene:
+
+- original transcript
+- literal Chinese translation
+- final Chinese voiceover
