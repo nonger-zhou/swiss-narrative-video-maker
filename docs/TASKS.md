@@ -156,3 +156,17 @@ Scope:
 Status:
 
 - done
+
+### Task 011: Scene-Based Draft Composition
+
+Scope:
+
+- consume `scene_plan.json` or `scene_plan.reviewed.json`
+- consume `timing_plan.json`
+- cut the source video scene by scene
+- locally slow or freeze scenes to match estimated Chinese narration timing
+- output a separate scene-based draft without replacing the existing composer
+
+Status:
+
+- done

@@ -129,6 +129,7 @@ python -m snvm apply-review
 python -m snvm timing-plan
 python -m snvm voiceover
 python -m snvm compose
+python -m snvm compose-scenes
 python -m snvm make-draft "C:\path\to\video.mp4"
 ```
 
@@ -162,3 +163,11 @@ python -m snvm compose --scene-plan output/scene_plan.reviewed.json
 ```
 
 `timing-plan` writes `output/timing_plan.json`. It compares each scene's source duration with the estimated Chinese voiceover duration and recommends whether to keep timing, extend that scene locally, add explanatory visuals, add B-roll, or review/compress the copy.
+
+For a scene-based draft that uses `timing_plan.json`, run:
+
+```powershell
+python -m snvm compose-scenes --scene-plan output/scene_plan.reviewed.json
+```
+
+This writes `output/final_scenes.mp4`. It keeps the older `compose` command available and unchanged.

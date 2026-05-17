@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 from .analysis import analyze_transcript
-from .composer import compose_draft_video, is_ffmpeg_available
+from .composer import compose_draft_video, compose_scene_based_draft, is_ffmpeg_available
 from .config import Settings, load_settings
 from .errors import SnvmError
 from .pipeline import initialize_project_output
@@ -59,6 +59,15 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "compose":
         return run_compose(args.source, args.scene_plan, args.voiceover, args.output)
+
+    if args.command == "compose-scenes":
+        return run_compose_scenes(
+            args.source,
+            args.scene_plan,
+            args.timing_plan,
+            args.voiceover,
+            args.output,
+        )
 
     if args.command == "make-draft":
         return run_make_draft(args.input, args.output)
@@ -314,6 +323,42 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory for generated files.",
     )
 
+    scene_compose_parser = subparsers.add_parser(
+        "compose-scenes",
+        help="Compose a scene-based draft using scene_plan and timing_plan.",
+    )
+    scene_compose_parser.add_argument(
+        "--source",
+        type=Path,
+        default=None,
+        help="Source video. Defaults to <output>/source.mp4.",
+    )
+    scene_compose_parser.add_argument(
+        "--scene-plan",
+        type=Path,
+        default=None,
+        help="Scene plan JSON. Defaults to <output>/scene_plan.reviewed.json if present, else <output>/scene_plan.json.",
+    )
+    scene_compose_parser.add_argument(
+        "--timing-plan",
+        type=Path,
+        default=None,
+        help="Timing plan JSON. Defaults to <output>/timing_plan.json.",
+    )
+    scene_compose_parser.add_argument(
+        "--voiceover",
+        type=Path,
+        default=None,
+        help="Voiceover mp3. Defaults to <output>/voiceover.mp3.",
+    )
+    scene_compose_parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("output"),
+        help="Directory for generated files.",
+    )
+
     draft_parser = subparsers.add_parser(
         "make-draft",
         help="Run the basic pipeline from source input to final draft video.",
@@ -528,6 +573,38 @@ def run_compose(
         return 1
 
     print("Draft video ready.")
+    print(f"- Final: {final_path}")
+    return 0
+
+
+def run_compose_scenes(
+    source_path: Path | None,
+    scene_plan_path: Path | None,
+    timing_plan_path: Path | None,
+    voiceover_path: Path | None,
+    output_dir: Path,
+) -> int:
+    source = source_path or output_dir / "source.mp4"
+    default_reviewed = output_dir / "scene_plan.reviewed.json"
+    scene_plan = scene_plan_path or (
+        default_reviewed if default_reviewed.exists() else output_dir / "scene_plan.json"
+    )
+    timing_plan = timing_plan_path or output_dir / "timing_plan.json"
+    voiceover = voiceover_path or output_dir / "voiceover.mp3"
+
+    try:
+        final_path = compose_scene_based_draft(
+            source,
+            scene_plan,
+            timing_plan,
+            voiceover,
+            output_dir,
+        )
+    except SnvmError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print("Scene-based draft video ready.")
     print(f"- Final: {final_path}")
     return 0
 

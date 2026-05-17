@@ -2,9 +2,10 @@ import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from .errors import SnvmError
-from .jsonio import write_json
+from .jsonio import read_json, write_json
 from .pipeline import initialize_project_output
 from .subtitles import write_scene_srt
 
@@ -91,6 +92,125 @@ def compose_draft_video(
     return final_path
 
 
+def compose_scene_based_draft(
+    source_path: Path,
+    scene_plan_path: Path,
+    timing_plan_path: Path,
+    voiceover_path: Path,
+    output_dir: Path,
+) -> Path:
+    if not source_path.exists():
+        raise SnvmError(f"Source video does not exist: {source_path}")
+    if not scene_plan_path.exists():
+        raise SnvmError(f"Scene plan does not exist: {scene_plan_path}")
+    if not timing_plan_path.exists():
+        raise SnvmError(f"Timing plan does not exist: {timing_plan_path}")
+    if not voiceover_path.exists():
+        raise SnvmError(f"Voiceover audio does not exist: {voiceover_path}")
+    if not is_ffmpeg_available():
+        raise SnvmError("ffmpeg is not installed or not available in PATH.")
+
+    initialize_project_output(output_dir)
+    scene_plan = read_json(scene_plan_path)
+    timing_plan = read_json(timing_plan_path)
+    scenes = _require_scenes(scene_plan)
+    timing_by_scene_id = _timing_by_scene_id(timing_plan)
+
+    work_dir = output_dir / "clips" / "scene_composer"
+    work_dir.mkdir(parents=True, exist_ok=True)
+    clip_records = []
+    for index, scene in enumerate(scenes, start=1):
+        timing = timing_by_scene_id.get(scene.get("scene_id"), {})
+        clip_path = work_dir / f"{index:03d}_{scene.get('scene_id', f'scene_{index:03d}')}.mp4"
+        clip_record = _render_scene_clip(source_path, scene, timing, clip_path)
+        clip_records.append(clip_record)
+
+    concat_list_path = work_dir / "concat.txt"
+    concat_list_path.write_text(
+        "\n".join(f"file '{_ffmpeg_concat_path(record['path'])}'" for record in clip_records),
+        encoding="utf-8",
+    )
+
+    silent_video_path = work_dir / "scene_video.mp4"
+    _run_ffmpeg(
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(concat_list_path),
+            "-c",
+            "copy",
+            str(silent_video_path),
+        ]
+    )
+
+    subtitle_path = _write_scene_based_srt(clip_records, output_dir / "subtitles" / "scene_based.srt")
+    final_path = output_dir / "final_scenes.mp4"
+    _run_ffmpeg(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(silent_video_path),
+            "-i",
+            str(voiceover_path),
+            "-i",
+            str(subtitle_path),
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-map",
+            "2:0",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-c:s",
+            "mov_text",
+            "-shortest",
+            str(final_path),
+        ]
+    )
+
+    if not final_path.exists():
+        raise SnvmError(f"ffmpeg finished but did not create {final_path}")
+
+    write_json(
+        output_dir / "scene_composition_metadata.json",
+        {
+            "source_path": str(source_path),
+            "scene_plan_path": str(scene_plan_path),
+            "timing_plan_path": str(timing_plan_path),
+            "voiceover_path": str(voiceover_path),
+            "subtitle_path": str(subtitle_path),
+            "final_path": str(final_path),
+            "generated_at": _now_iso(),
+            "clips": [
+                {
+                    "scene_id": record["scene_id"],
+                    "timing_action": record["timing_action"],
+                    "source_duration": record["source_duration"],
+                    "target_duration": record["target_duration"],
+                    "render_action": record["render_action"],
+                    "path": str(record["path"]),
+                }
+                for record in clip_records
+            ],
+            "note": (
+                "Scene-based draft composition uses timing_plan.json to extend each scene "
+                "locally. Extra visual material is not inserted yet; scenes that need new "
+                "material are held on their final frame as a conservative draft fallback."
+            ),
+        },
+    )
+    return final_path
+
+
 def _probe_duration(path: Path) -> float | None:
     ffprobe = shutil.which("ffprobe")
     if not ffprobe:
@@ -115,6 +235,200 @@ def _probe_duration(path: Path) -> float | None:
         return float(result.stdout.strip())
     except ValueError:
         return None
+
+
+def _render_scene_clip(
+    source_path: Path,
+    scene: dict[str, Any],
+    timing: dict[str, Any],
+    output_path: Path,
+) -> dict[str, Any]:
+    start = _float_value(scene.get("start_time"), 0.0)
+    end = _float_value(scene.get("end_time"), start)
+    source_duration = round(max(0.1, end - start), 3)
+    estimated_target = _float_value(timing.get("estimated_voiceover_duration"), source_duration)
+    target_duration = round(max(0.5, estimated_target), 3)
+    timing_action = str(timing.get("timing_action") or "keep_timing")
+    render_action = _render_action(timing_action, source_duration, target_duration)
+
+    if render_action == "trim":
+        command = _scene_input_command(source_path, start, target_duration, output_path)
+    elif render_action == "slow":
+        factor = min(2.0, target_duration / source_duration)
+        command = _scene_filter_command(
+            source_path,
+            start,
+            source_duration,
+            output_path,
+            f"setpts={factor:.6f}*PTS,trim=duration={target_duration:.3f}",
+        )
+    else:
+        freeze_duration = max(0.0, target_duration - source_duration)
+        command = _scene_filter_command(
+            source_path,
+            start,
+            source_duration,
+            output_path,
+            f"tpad=stop_mode=clone:stop_duration={freeze_duration:.3f},trim=duration={target_duration:.3f}",
+        )
+
+    _run_ffmpeg(command)
+    if not output_path.exists():
+        raise SnvmError(f"ffmpeg finished but did not create scene clip {output_path}")
+
+    return {
+        "scene_id": scene.get("scene_id", ""),
+        "text": _scene_text(scene),
+        "timing_action": timing_action,
+        "source_duration": source_duration,
+        "target_duration": target_duration,
+        "render_action": render_action,
+        "path": output_path,
+    }
+
+
+def _scene_input_command(
+    source_path: Path,
+    start: float,
+    duration: float,
+    output_path: Path,
+) -> list[str]:
+    return [
+        "ffmpeg",
+        "-y",
+        "-ss",
+        f"{start:.3f}",
+        "-t",
+        f"{duration:.3f}",
+        "-i",
+        str(source_path),
+        "-an",
+        "-vf",
+        _base_video_filter(),
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-pix_fmt",
+        "yuv420p",
+        str(output_path),
+    ]
+
+
+def _scene_filter_command(
+    source_path: Path,
+    start: float,
+    duration: float,
+    output_path: Path,
+    timing_filter: str,
+) -> list[str]:
+    return [
+        "ffmpeg",
+        "-y",
+        "-ss",
+        f"{start:.3f}",
+        "-t",
+        f"{duration:.3f}",
+        "-i",
+        str(source_path),
+        "-an",
+        "-vf",
+        f"{_base_video_filter()},{timing_filter}",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-pix_fmt",
+        "yuv420p",
+        str(output_path),
+    ]
+
+
+def _base_video_filter() -> str:
+    return "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=25"
+
+
+def _render_action(timing_action: str, source_duration: float, target_duration: float) -> str:
+    if target_duration <= source_duration * 1.05:
+        return "trim"
+    if timing_action in {"slightly_extend_scene", "extend_or_slow_scene"} and (
+        target_duration / source_duration
+    ) <= 1.7:
+        return "slow"
+    return "freeze_tail"
+
+
+def _write_scene_based_srt(clip_records: list[dict[str, Any]], output_path: Path) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    blocks = []
+    cursor = 0.0
+    for record in clip_records:
+        text = str(record.get("text") or "").strip()
+        duration = _float_value(record.get("target_duration"), 0.0)
+        start = cursor
+        end = cursor + max(0.5, duration)
+        cursor = end
+        if not text:
+            continue
+        blocks.append(f"{len(blocks) + 1}\n{_srt_time(start)} --> {_srt_time(end)}\n{text}\n")
+
+    if not blocks:
+        raise SnvmError("Scene plan has no subtitle text.")
+
+    output_path.write_text("\n".join(blocks), encoding="utf-8")
+    return output_path
+
+
+def _run_ffmpeg(command: list[str]) -> None:
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError as exc:
+        raise SnvmError(f"ffmpeg failed with exit code {exc.returncode}") from exc
+
+
+def _timing_by_scene_id(timing_plan: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(timing_plan, dict) or not isinstance(timing_plan.get("scenes"), list):
+        raise SnvmError("Timing plan must contain a 'scenes' list.")
+    return {
+        str(scene.get("scene_id")): scene
+        for scene in timing_plan["scenes"]
+        if isinstance(scene, dict)
+    }
+
+
+def _require_scenes(scene_plan: Any) -> list[dict[str, Any]]:
+    if not isinstance(scene_plan, dict) or not isinstance(scene_plan.get("scenes"), list):
+        raise SnvmError("Scene plan must contain a 'scenes' list.")
+    return scene_plan["scenes"]
+
+
+def _scene_text(scene: dict[str, Any]) -> str:
+    return str(
+        scene.get("reviewed_voiceover")
+        or scene.get("final_voiceover")
+        or scene.get("subtitle_text")
+        or scene.get("rewritten_voiceover")
+        or ""
+    ).strip()
+
+
+def _ffmpeg_concat_path(path: Path) -> str:
+    return path.resolve().as_posix().replace("'", "'\\''")
+
+
+def _srt_time(seconds: float) -> str:
+    milliseconds = int(round(seconds * 1000))
+    hours, remainder = divmod(milliseconds, 3_600_000)
+    minutes, remainder = divmod(remainder, 60_000)
+    secs, millis = divmod(remainder, 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+
+def _float_value(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _now_iso() -> str:
