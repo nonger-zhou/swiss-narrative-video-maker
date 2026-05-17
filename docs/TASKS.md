@@ -247,3 +247,16 @@ Scope:
 Status:
 
 - done
+
+### Task 018: Scene Script Edits
+
+Scope:
+
+- let the review player edit the current scene's final Chinese voiceover text
+- record revision intents such as compression, deduplication, fact fix, and added explanation
+- export `script_edits.json`
+- apply script edits to `scene_plan.reviewed.json` without changing scene order
+
+Status:
+
+- done

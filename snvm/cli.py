@@ -13,6 +13,7 @@ from .review import apply_scene_review, generate_scene_review
 from .review_player import generate_review_player
 from .revision_plan import generate_revision_plan
 from .scene_plan import generate_scene_plan
+from .script_edits import apply_script_edits
 from .source import prepare_source, save_source_metadata
 from .timing import generate_timing_plan
 from .transcription import is_faster_whisper_available, transcribe_source
@@ -98,6 +99,13 @@ def main(argv: list[str] | None = None) -> int:
         return run_fact_check_summary(
             args.fact_checks,
             args.scene_plan,
+            args.output,
+        )
+
+    if args.command == "apply-script-edits":
+        return run_apply_script_edits(
+            args.scene_plan,
+            args.edits,
             args.output,
         )
 
@@ -505,6 +513,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory for generated files.",
     )
 
+    script_edits_parser = subparsers.add_parser(
+        "apply-script-edits",
+        help="Apply script_edits.json to create scene_plan.reviewed.json.",
+    )
+    script_edits_parser.add_argument(
+        "--scene-plan",
+        type=Path,
+        default=None,
+        help="Scene plan JSON. Defaults to <output>/scene_plan.reviewed.json if present, else <output>/scene_plan.json.",
+    )
+    script_edits_parser.add_argument(
+        "--edits",
+        type=Path,
+        default=None,
+        help="Script edits JSON. Defaults to <output>/script_edits.json.",
+    )
+    script_edits_parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("output"),
+        help="Directory for generated files.",
+    )
+
     draft_parser = subparsers.add_parser(
         "make-draft",
         help="Run the basic pipeline from source input to final draft video.",
@@ -853,6 +885,28 @@ def run_fact_check_summary(
     print("Fact-check summary ready.")
     print(f"- JSON: {json_path}")
     print(f"- Markdown: {markdown_path}")
+    return 0
+
+
+def run_apply_script_edits(
+    scene_plan_path: Path | None,
+    edits_path: Path | None,
+    output_dir: Path,
+) -> int:
+    default_reviewed = output_dir / "scene_plan.reviewed.json"
+    scene_plan = scene_plan_path or (
+        default_reviewed if default_reviewed.exists() else output_dir / "scene_plan.json"
+    )
+    edits = edits_path or output_dir / "script_edits.json"
+
+    try:
+        reviewed_scene_plan = apply_script_edits(scene_plan, edits, output_dir)
+    except SnvmError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print("Script edits applied.")
+    print(f"- Scene plan: {reviewed_scene_plan}")
     return 0
 
 

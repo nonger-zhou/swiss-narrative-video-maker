@@ -134,6 +134,7 @@ python -m snvm compose-scenes
 python -m snvm review-player
 python -m snvm revision-plan
 python -m snvm fact-check-summary
+python -m snvm apply-script-edits
 python -m snvm make-draft "C:\path\to\video.mp4"
 ```
 
@@ -229,3 +230,15 @@ output/
 ```
 
 The revision plan groups notes by scene and recommends whether to adjust timing, review scene boundaries, compress copy, deduplicate facts, or add replacement visuals. It is advisory and does not modify the scene plan automatically.
+
+For light and medium script revision, edit the current scene's Chinese voiceover text in the review player and export `script_edits.json`. Apply those edits with:
+
+```powershell
+python -m snvm apply-script-edits
+python -m snvm voiceover --scene-plan output/scene_plan.reviewed.json
+python -m snvm timing-plan --scene-plan output/scene_plan.reviewed.json
+python -m snvm compose-scenes --scene-plan output/scene_plan.reviewed.json
+python -m snvm review-player
+```
+
+Script edits keep the original scene order. They are for compressing, deduplicating, correcting facts, adding short explanations, and making the Chinese voiceover more natural before regenerating audio and subtitles.

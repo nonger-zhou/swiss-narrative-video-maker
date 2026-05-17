@@ -312,11 +312,19 @@ def _html(payload: dict[str, Any]) -> str:
     textarea.fact-result {{
       min-height: 120px;
     }}
+    textarea.script-editor {{
+      min-height: 140px;
+    }}
     select, input {{
       width: 100%;
       padding: 8px;
       border: 1px solid var(--line);
       background: white;
+    }}
+    input[type="checkbox"] {{
+      width: auto;
+      padding: 0;
+      margin-right: 6px;
     }}
     .notes-list {{
       display: flex;
@@ -433,6 +441,31 @@ def _html(payload: dict[str, Any]) -> str:
         <div class="warnings" id="warnings">—</div>
       </section>
       <section class="panel">
+        <div class="label">文稿编辑</div>
+        <div class="hint">轻度/中度修改：不重排 scene，只修改当前 scene 的最终中文文稿。保存后可导出 script_edits.json，再应用并重新生成配音。</div>
+        <label>当前 scene 最终中文文稿
+          <textarea id="scriptEditText" class="script-editor"></textarea>
+        </label>
+        <div class="grid">
+          <label><input id="intentCompress" type="checkbox" value="compress"> 压缩</label>
+          <label><input id="intentDeduplicate" type="checkbox" value="deduplicate"> 去重</label>
+          <label><input id="intentFactFix" type="checkbox" value="fact_fix"> 事实修正</label>
+          <label><input id="intentAddExplanation" type="checkbox" value="add_explanation"> 补充解释</label>
+          <label><input id="intentMoreNatural" type="checkbox" value="more_natural"> 更口语</label>
+          <label><input id="intentNeedsSource" type="checkbox" value="needs_source"> 需要来源</label>
+        </div>
+        <label>修改说明
+          <textarea id="scriptEditNote" placeholder="例如：税费数据需按 OECD tax wedge 口径改写；这里补一句解释德国/瑞士口径不同。"></textarea>
+        </label>
+        <div class="transport">
+          <button id="saveScriptEdit" class="primary">保存当前 scene 文稿</button>
+          <button id="resetScriptEdit">恢复当前 scene 原文稿</button>
+          <button id="exportScriptEdits">导出 script_edits.json</button>
+          <button id="clearScriptEdits">清空文稿编辑</button>
+        </div>
+        <div class="save-status" id="scriptEditStatus"></div>
+      </section>
+      <section class="panel">
         <div class="label">新增标记</div>
         <div class="grid">
           <label>问题类型
@@ -477,7 +510,8 @@ def _html(payload: dict[str, Any]) -> str:
       scenes: [],
       currentSceneIndex: 0,
       notes: [],
-      factChecks: []
+      factChecks: [],
+      scriptEdits: []
     }};
 
     const video = document.getElementById("video");
@@ -499,11 +533,23 @@ def _html(payload: dict[str, Any]) -> str:
     const notesListEl = document.getElementById("notesList");
     const noteSaveStatusEl = document.getElementById("noteSaveStatus");
     const factResultTextEl = document.getElementById("factResultText");
+    const scriptEditTextEl = document.getElementById("scriptEditText");
+    const scriptEditNoteEl = document.getElementById("scriptEditNote");
+    const scriptEditStatusEl = document.getElementById("scriptEditStatus");
+    const scriptIntentEls = [
+      document.getElementById("intentCompress"),
+      document.getElementById("intentDeduplicate"),
+      document.getElementById("intentFactFix"),
+      document.getElementById("intentAddExplanation"),
+      document.getElementById("intentMoreNatural"),
+      document.getElementById("intentNeedsSource")
+    ];
 
     state.data = embeddedData;
     state.scenes = embeddedData.scenes || [];
     state.notes = loadSavedNotes();
     state.factChecks = loadSavedFactChecks();
+    state.scriptEdits = loadSavedScriptEdits();
     video.src = embeddedData.video;
     statusEl.textContent = `${{state.scenes.length}} scenes loaded`;
     updateScene();
@@ -548,6 +594,17 @@ def _html(payload: dict[str, Any]) -> str:
         factStatusEl.textContent = "已清空核查记录。";
       }}
     }});
+    document.getElementById("saveScriptEdit").addEventListener("click", () => saveScriptEdit());
+    document.getElementById("resetScriptEdit").addEventListener("click", () => resetScriptEditor());
+    document.getElementById("exportScriptEdits").addEventListener("click", () => exportScriptEdits());
+    document.getElementById("clearScriptEdits").addEventListener("click", () => {{
+      if (confirm("Clear all script edits?")) {{
+        state.scriptEdits = [];
+        saveReviewState();
+        updateScriptEditor();
+        scriptEditStatusEl.textContent = "已清空本页保存的文稿编辑。";
+      }}
+    }});
 
     function sceneIndexAt(time) {{
       if (!state.scenes.length) return 0;
@@ -583,6 +640,7 @@ def _html(payload: dict[str, Any]) -> str:
       visualActionEl.textContent = scene.visual_action || "—";
       recommendationEl.textContent = scene.recommendation || "—";
       renderWarnings(scene.ai_warnings || []);
+      updateScriptEditor();
     }}
 
     function renderWarnings(warnings) {{
@@ -709,6 +767,65 @@ def _html(payload: dict[str, Any]) -> str:
       factStatusEl.textContent = "已导出 fact_check_notes.json。";
     }}
 
+    function saveScriptEdit() {{
+      const scene = state.scenes[state.currentSceneIndex];
+      if (!scene) return;
+      const revisedText = scriptEditTextEl.value.trim();
+      if (!revisedText) {{
+        scriptEditStatusEl.textContent = "文稿不能为空。";
+        return;
+      }}
+      const edit = {{
+        updated_at: new Date().toISOString(),
+        scene_id: scene.scene_id,
+        source_segment_id: scene.source_segment_id,
+        original_voiceover: scene.voiceover || "",
+        revised_voiceover: revisedText,
+        revision_intents: selectedScriptIntents(),
+        note: scriptEditNoteEl.value.trim(),
+        source_text: scene.source_text || "",
+        literal_translation: scene.literal_translation || ""
+      }};
+      const existingIndex = state.scriptEdits.findIndex(item => item.scene_id === scene.scene_id);
+      if (existingIndex >= 0) {{
+        state.scriptEdits[existingIndex] = edit;
+      }} else {{
+        state.scriptEdits.push(edit);
+      }}
+      scene.voiceover = revisedText;
+      scene.final_voiceover = revisedText;
+      currentSubtitleEl.textContent = revisedText;
+      voiceoverEl.textContent = revisedText;
+      saveReviewState();
+      scriptEditStatusEl.textContent = `已保存 ${{scene.scene_id}} 的文稿编辑，共 ${{state.scriptEdits.length}} 个 scene 有编辑。`;
+    }}
+
+    function resetScriptEditor() {{
+      const scene = state.scenes[state.currentSceneIndex];
+      if (!scene) return;
+      const original = scene.rewritten_voiceover || scene.final_voiceover || scene.voiceover || "";
+      scriptEditTextEl.value = original;
+      scriptEditNoteEl.value = "";
+      scriptIntentEls.forEach(input => input.checked = false);
+      scriptEditStatusEl.textContent = "已恢复编辑框为当前 scene 原文稿，尚未保存。";
+    }}
+
+    function exportScriptEdits() {{
+      const payload = {{
+        generated_at: new Date().toISOString(),
+        source_video: state.data?.video || "",
+        scene_plan: state.data?.scene_plan || "",
+        edits: state.scriptEdits
+      }};
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {{ type: "application/json" }});
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "script_edits.json";
+      link.click();
+      URL.revokeObjectURL(link.href);
+      scriptEditStatusEl.textContent = "已导出 script_edits.json。";
+    }}
+
     async function copyFactPrompt() {{
       const prompt = buildFactPrompt();
       const copied = await copyText(prompt);
@@ -800,7 +917,8 @@ def _html(payload: dict[str, Any]) -> str:
       try {{
         localStorage.setItem(reviewStorageKey(), JSON.stringify({{
           notes: state.notes,
-          factChecks: state.factChecks
+          factChecks: state.factChecks,
+          scriptEdits: state.scriptEdits
         }}));
       }} catch (error) {{
         noteSaveStatusEl.textContent = "浏览器本地暂存失败，请及时导出 JSON。";
@@ -827,6 +945,34 @@ def _html(payload: dict[str, Any]) -> str:
       }} catch (error) {{
         return [];
       }}
+    }}
+
+    function loadSavedScriptEdits() {{
+      try {{
+        const raw = localStorage.getItem(reviewStorageKey());
+        if (!raw) return [];
+        const saved = JSON.parse(raw);
+        return Array.isArray(saved.scriptEdits) ? saved.scriptEdits : [];
+      }} catch (error) {{
+        return [];
+      }}
+    }}
+
+    function updateScriptEditor() {{
+      const scene = state.scenes[state.currentSceneIndex];
+      if (!scene || !scriptEditTextEl) return;
+      const edit = state.scriptEdits.find(item => item.scene_id === scene.scene_id);
+      scriptEditTextEl.value = edit?.revised_voiceover || scene.voiceover || "";
+      scriptEditNoteEl.value = edit?.note || "";
+      const intents = new Set(edit?.revision_intents || []);
+      scriptIntentEls.forEach(input => input.checked = intents.has(input.value));
+      scriptEditStatusEl.textContent = edit
+        ? `当前 scene 已有保存的文稿编辑：${{edit.revision_intents?.join(", ") || "未标注目的"}}。`
+        : "当前 scene 尚未保存文稿编辑。";
+    }}
+
+    function selectedScriptIntents() {{
+      return scriptIntentEls.filter(input => input.checked).map(input => input.value);
     }}
 
     function fmt(value) {{
