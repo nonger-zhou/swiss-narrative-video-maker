@@ -331,10 +331,20 @@ def _html(payload: dict[str, Any]) -> str:
       background: #fffdf8;
       font-size: 13px;
     }}
+    .note.latest {{
+      border-color: var(--accent-2);
+      background: #ecfdf5;
+    }}
     .note strong {{ color: var(--accent); }}
     .status {{
       color: var(--muted);
       font-size: 13px;
+    }}
+    .save-status {{
+      margin-top: 8px;
+      color: var(--accent-2);
+      font-size: 13px;
+      min-height: 18px;
     }}
     @media (max-width: 980px) {{
       main {{ grid-template-columns: 1fr; }}
@@ -452,9 +462,10 @@ def _html(payload: dict[str, Any]) -> str:
           <button id="exportNotes">导出 alignment_notes.json</button>
           <button id="clearNotes">清空</button>
         </div>
+        <div class="save-status" id="noteSaveStatus"></div>
       </section>
       <section class="panel">
-        <div class="label">已记录标记</div>
+        <div class="label">已保存标记（点击可跳回该时间点）</div>
         <div class="notes-list" id="notesList"></div>
       </section>
     </aside>
@@ -486,13 +497,17 @@ def _html(payload: dict[str, Any]) -> str:
     const severityEl = document.getElementById("severity");
     const noteTextEl = document.getElementById("noteText");
     const notesListEl = document.getElementById("notesList");
+    const noteSaveStatusEl = document.getElementById("noteSaveStatus");
     const factResultTextEl = document.getElementById("factResultText");
 
     state.data = embeddedData;
     state.scenes = embeddedData.scenes || [];
+    state.notes = loadSavedNotes();
+    state.factChecks = loadSavedFactChecks();
     video.src = embeddedData.video;
     statusEl.textContent = `${{state.scenes.length}} scenes loaded`;
     updateScene();
+    renderNotes();
 
     video.addEventListener("timeupdate", () => {{
       const nextIndex = sceneIndexAt(video.currentTime);
@@ -510,6 +525,8 @@ def _html(payload: dict[str, Any]) -> str:
     document.getElementById("clearNotes").addEventListener("click", () => {{
       if (confirm("Clear all notes?")) {{
         state.notes = [];
+        saveReviewState();
+        noteSaveStatusEl.textContent = "已清空本页保存的标记。";
         renderNotes();
       }}
     }});
@@ -527,6 +544,7 @@ def _html(payload: dict[str, Any]) -> str:
     document.getElementById("clearFactCheckNotes").addEventListener("click", () => {{
       if (confirm("Clear all fact-check notes?")) {{
         state.factChecks = [];
+        saveReviewState();
         factStatusEl.textContent = "已清空核查记录。";
       }}
     }});
@@ -604,15 +622,23 @@ def _html(payload: dict[str, Any]) -> str:
       }};
       state.notes.push(note);
       noteTextEl.value = "";
+      issueTypeEl.value = "voiceover_late";
+      severityEl.value = "medium";
+      saveReviewState();
+      noteSaveStatusEl.textContent = `已保存第 ${{state.notes.length}} 条标记：${{note.scene_id}} · ${{fmt(note.time)}} · ${{note.issue_type}}。可以继续播放并记录下一条。`;
       renderNotes();
     }}
 
     function renderNotes() {{
       notesListEl.innerHTML = "";
+      if (!state.notes.length) {{
+        notesListEl.textContent = "还没有保存标记。";
+        return;
+      }}
       state.notes.forEach((note, index) => {{
         const item = document.createElement("div");
-        item.className = "note";
-        item.innerHTML = `<strong>${{index + 1}}. ${{note.scene_id}}</strong> · ${{fmt(note.time)}} · ${{note.issue_type}} · ${{note.severity}}<br>${{escapeHtml(note.note || "(no note)")}}`;
+        item.className = index === state.notes.length - 1 ? "note latest" : "note";
+        item.innerHTML = `<strong>已保存 #${{index + 1}} · ${{note.scene_id}}</strong> · ${{fmt(note.time)}} · ${{note.issue_type}} · ${{note.severity}}<br>${{escapeHtml(note.note || "(no written note)")}}`;
         item.addEventListener("click", () => {{
           video.currentTime = note.time;
           state.currentSceneIndex = sceneIndexAt(note.time);
@@ -636,6 +662,7 @@ def _html(payload: dict[str, Any]) -> str:
       link.download = "alignment_notes.json";
       link.click();
       URL.revokeObjectURL(link.href);
+      noteSaveStatusEl.textContent = "已导出 alignment_notes.json。";
     }}
 
     function addFactCheckNote() {{
@@ -662,6 +689,7 @@ def _html(payload: dict[str, Any]) -> str:
       }};
       state.factChecks.push(factCheck);
       factResultTextEl.value = "";
+      saveReviewState();
       factStatusEl.textContent = `已记录 ${{state.factChecks.length}} 条核查结果。`;
     }}
 
@@ -678,6 +706,7 @@ def _html(payload: dict[str, Any]) -> str:
       link.download = "fact_check_notes.json";
       link.click();
       URL.revokeObjectURL(link.href);
+      factStatusEl.textContent = "已导出 fact_check_notes.json。";
     }}
 
     async function copyFactPrompt() {{
@@ -761,6 +790,43 @@ def _html(payload: dict[str, Any]) -> str:
 
     function selectedText() {{
       return String(window.getSelection?.().toString() || "").trim();
+    }}
+
+    function reviewStorageKey() {{
+      return `snvm-review-player:${{state.data?.scene_plan || ""}}:${{state.data?.video || ""}}`;
+    }}
+
+    function saveReviewState() {{
+      try {{
+        localStorage.setItem(reviewStorageKey(), JSON.stringify({{
+          notes: state.notes,
+          factChecks: state.factChecks
+        }}));
+      }} catch (error) {{
+        noteSaveStatusEl.textContent = "浏览器本地暂存失败，请及时导出 JSON。";
+      }}
+    }}
+
+    function loadSavedNotes() {{
+      try {{
+        const raw = localStorage.getItem(reviewStorageKey());
+        if (!raw) return [];
+        const saved = JSON.parse(raw);
+        return Array.isArray(saved.notes) ? saved.notes : [];
+      }} catch (error) {{
+        return [];
+      }}
+    }}
+
+    function loadSavedFactChecks() {{
+      try {{
+        const raw = localStorage.getItem(reviewStorageKey());
+        if (!raw) return [];
+        const saved = JSON.parse(raw);
+        return Array.isArray(saved.factChecks) ? saved.factChecks : [];
+      }} catch (error) {{
+        return [];
+      }}
     }}
 
     function fmt(value) {{
