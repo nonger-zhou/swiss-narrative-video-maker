@@ -653,7 +653,7 @@ def _html(payload: dict[str, Any]) -> str:
         scene_id: scene.scene_id,
         source_segment_id: scene.source_segment_id,
         selected_text: selected,
-        checked_text: selected || scene.voiceover || scene.literal_translation || scene.source_text || "",
+        checked_text: scene.voiceover || scene.literal_translation || scene.source_text || selected || "",
         source_text: scene.source_text || "",
         literal_translation: scene.literal_translation || "",
         voiceover: scene.voiceover || "",
@@ -703,13 +703,14 @@ def _html(payload: dict[str, Any]) -> str:
     function buildFactPrompt() {{
       const scene = state.scenes[state.currentSceneIndex] || {{}};
       const selected = selectedText();
-      const target = selected || [
+      const fullContext = [
         scene.source_text ? `原文 transcript：\\n${{scene.source_text}}` : "",
         scene.literal_translation ? `忠实中文翻译：\\n${{scene.literal_translation}}` : "",
         scene.voiceover ? `中文配音稿：\\n${{scene.voiceover}}` : ""
       ].filter(Boolean).join("\\n\\n");
       return [
         "请帮我核查下面这段视频文案里的事实描述，不只核查数字，也包括排名、年份、比较关系、因果说法、政策、税费、经济、社会描述等。",
+        "注意：我选中的文字可能只是字幕断句的一部分，不一定是完整句子。请优先结合“完整 scene 上下文”还原完整 claim 后再核查，不要只核查半句话。",
         "",
         "请输出：",
         "1. 哪些具体 claim 需要核查；",
@@ -722,8 +723,11 @@ def _html(payload: dict[str, Any]) -> str:
         `Scene：${{scene.scene_id || "unknown"}}`,
         `时间：${{fmt(scene.start_time)}} - ${{fmt(scene.end_time)}}`,
         "",
-        "待核查文本：",
-        target || "(当前 scene 没有可用文本)"
+        "我选中的重点片段：",
+        selected || "(没有选中文本，请核查完整 scene 上下文)",
+        "",
+        "完整 scene 上下文：",
+        fullContext || "(当前 scene 没有可用文本)"
       ].join("\\n");
     }}
 
