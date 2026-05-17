@@ -200,14 +200,16 @@ def _html(payload: dict[str, Any]) -> str:
     button, select, input, textarea {{
       font: inherit;
     }}
-    button {{
+    button, .button-link {{
       border: 1px solid var(--line);
       background: var(--panel);
       color: var(--text);
       padding: 8px 10px;
       cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
     }}
-    button.primary {{
+    button.primary, .button-link.primary {{
       background: var(--accent-2);
       border-color: var(--accent-2);
       color: white;
@@ -384,9 +386,9 @@ def _html(payload: dict[str, Any]) -> str:
         <div class="hint">可以先选中一句或一段文字，再点击下面的按钮。没有选中文字时，系统会使用当前 scene 的原文、忠实翻译和中文配音稿。</div>
         <div class="fact-actions">
           <button id="copyFactPrompt">复制核查 Prompt</button>
-          <button id="openChatGptFact" class="primary">复制并打开 ChatGPT</button>
-          <button id="openPerplexityFact">复制并打开 Perplexity</button>
-          <button id="openGoogleFact">Google 搜索原句</button>
+          <a id="openChatGptFact" class="button-link primary" href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">复制并打开 ChatGPT</a>
+          <a id="openPerplexityFact" class="button-link" href="https://www.perplexity.ai/" target="_blank" rel="noopener noreferrer">复制并打开 Perplexity</a>
+          <a id="openGoogleFact" class="button-link" href="https://www.google.com/" target="_blank" rel="noopener noreferrer">Google 搜索原句</a>
         </div>
         <div class="status" id="factStatus"></div>
       </section>
@@ -502,9 +504,9 @@ def _html(payload: dict[str, Any]) -> str:
     document.getElementById("markMismatch").addEventListener("click", () => quickNote("visual_mismatch"));
     document.getElementById("markMaterial").addEventListener("click", () => quickNote("needs_material"));
     document.getElementById("copyFactPrompt").addEventListener("click", () => copyFactPrompt());
-    document.getElementById("openChatGptFact").addEventListener("click", () => openFactTool("chatgpt"));
-    document.getElementById("openPerplexityFact").addEventListener("click", () => openFactTool("perplexity"));
-    document.getElementById("openGoogleFact").addEventListener("click", () => openFactTool("google"));
+    document.getElementById("openChatGptFact").addEventListener("click", event => prepareFactLink(event, "chatgpt"));
+    document.getElementById("openPerplexityFact").addEventListener("click", event => prepareFactLink(event, "perplexity"));
+    document.getElementById("openGoogleFact").addEventListener("click", event => prepareFactLink(event, "google"));
 
     function sceneIndexAt(time) {{
       if (!state.scenes.length) return 0;
@@ -619,24 +621,18 @@ def _html(payload: dict[str, Any]) -> str:
       factStatusEl.textContent = copied ? "已复制核查 Prompt。" : "复制失败，请手动复制。";
     }}
 
-    async function openFactTool(tool) {{
+    async function prepareFactLink(event, tool) {{
       const scene = state.scenes[state.currentSceneIndex];
       if (!scene) return;
       const prompt = buildFactPrompt();
       const selected = selectedText();
       const shortQuery = selected || scene.voiceover || scene.literal_translation || scene.source_text || "";
       const url = factToolUrl(tool, prompt, shortQuery);
-      const externalWindow = window.open(url, "_blank");
+      event.currentTarget.href = url;
       const copied = await copyText(prompt);
-      if (externalWindow) {{
-        factStatusEl.textContent = copied
-          ? "已复制 Prompt，并打开外部页面。请在输入框里粘贴并发送。"
-          : "已打开外部页面，但复制失败；请改用复制按钮。";
-      }} else {{
-        factStatusEl.textContent = copied
-          ? "已复制 Prompt，但浏览器拦截了弹窗。请允许弹窗，或手动打开外部工具后粘贴。"
-          : "复制失败，且浏览器拦截了弹窗。";
-      }}
+      factStatusEl.textContent = copied
+        ? "已复制 Prompt。新页面打开后，请在输入框里粘贴并发送。"
+        : "新页面会打开，但复制失败；请改用复制按钮。";
     }}
 
     function buildFactPrompt() {{
@@ -667,10 +663,10 @@ def _html(payload: dict[str, Any]) -> str:
 
     function factToolUrl(tool, prompt, shortQuery) {{
       if (tool === "chatgpt") {{
-        return `https://chatgpt.com/?q=${{encodeURIComponent(prompt)}}`;
+        return "https://chatgpt.com/";
       }}
       if (tool === "perplexity") {{
-        return `https://www.perplexity.ai/search?q=${{encodeURIComponent(prompt)}}`;
+        return "https://www.perplexity.ai/";
       }}
       return `https://www.google.com/search?q=${{encodeURIComponent(shortQuery)}}`;
     }}
