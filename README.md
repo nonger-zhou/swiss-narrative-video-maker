@@ -133,6 +133,7 @@ python -m snvm compose
 python -m snvm compose-scenes
 python -m snvm review-player
 python -m snvm revision-plan
+python -m snvm fact-check-summary
 python -m snvm make-draft "C:\path\to\video.mp4"
 ```
 
@@ -204,6 +205,14 @@ The player also shows a three-column text comparison for the current scene:
 - final Chinese voiceover
 
 For fact checking, select any sentence in the player and use the fact-check buttons. The player can copy a prepared verification prompt or open ChatGPT, Perplexity, or Google with the current scene context. The prompt asks for source links, publication year, data definitions, and safer rewrite suggestions when a claim is too absolute.
+
+After checking a claim in an external tool, paste the returned answer back into the review player and record it for the current scene. Export `fact_check_notes.json`, then summarize it:
+
+```powershell
+python -m snvm fact-check-summary
+```
+
+This writes `output/fact_check_summary.json` and `output/fact_check_summary.md`, grouped by scene with extracted source links and suggested next steps for source-aware copy revision.
 
 After exporting `alignment_notes.json` from the player, generate a revision plan:
 

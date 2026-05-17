@@ -7,6 +7,7 @@ from .analysis import analyze_transcript
 from .composer import compose_draft_video, compose_scene_based_draft, is_ffmpeg_available
 from .config import Settings, load_settings
 from .errors import SnvmError
+from .fact_check import generate_fact_check_summary
 from .pipeline import initialize_project_output
 from .review import apply_scene_review, generate_scene_review
 from .review_player import generate_review_player
@@ -90,6 +91,13 @@ def main(argv: list[str] | None = None) -> int:
             args.notes,
             args.scene_plan,
             args.timing_plan,
+            args.output,
+        )
+
+    if args.command == "fact-check-summary":
+        return run_fact_check_summary(
+            args.fact_checks,
+            args.scene_plan,
             args.output,
         )
 
@@ -473,6 +481,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory for generated files.",
     )
 
+    fact_check_parser = subparsers.add_parser(
+        "fact-check-summary",
+        help="Summarize fact_check_notes.json exported from the review player.",
+    )
+    fact_check_parser.add_argument(
+        "--fact-checks",
+        type=Path,
+        default=None,
+        help="Fact-check notes JSON. Defaults to <output>/fact_check_notes.json.",
+    )
+    fact_check_parser.add_argument(
+        "--scene-plan",
+        type=Path,
+        default=None,
+        help="Scene plan JSON. Defaults to <output>/scene_plan.reviewed.json if present, else <output>/scene_plan.json.",
+    )
+    fact_check_parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("output"),
+        help="Directory for generated files.",
+    )
+
     draft_parser = subparsers.add_parser(
         "make-draft",
         help="Run the basic pipeline from source input to final draft video.",
@@ -796,6 +828,29 @@ def run_revision_plan(
         return 1
 
     print("Revision plan ready.")
+    print(f"- JSON: {json_path}")
+    print(f"- Markdown: {markdown_path}")
+    return 0
+
+
+def run_fact_check_summary(
+    fact_checks_path: Path | None,
+    scene_plan_path: Path | None,
+    output_dir: Path,
+) -> int:
+    fact_checks = fact_checks_path or output_dir / "fact_check_notes.json"
+    default_reviewed = output_dir / "scene_plan.reviewed.json"
+    scene_plan = scene_plan_path or (
+        default_reviewed if default_reviewed.exists() else output_dir / "scene_plan.json"
+    )
+
+    try:
+        json_path, markdown_path = generate_fact_check_summary(fact_checks, scene_plan, output_dir)
+    except SnvmError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print("Fact-check summary ready.")
     print(f"- JSON: {json_path}")
     print(f"- Markdown: {markdown_path}")
     return 0

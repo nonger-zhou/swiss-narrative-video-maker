@@ -309,6 +309,9 @@ def _html(payload: dict[str, Any]) -> str:
       background: white;
       color: var(--text);
     }}
+    textarea.fact-result {{
+      min-height: 120px;
+    }}
     select, input {{
       width: 100%;
       padding: 8px;
@@ -391,6 +394,14 @@ def _html(payload: dict[str, Any]) -> str:
           <a id="openGoogleFact" class="button-link" href="https://www.google.com/" target="_blank" rel="noopener noreferrer">Google 新标签搜索原句</a>
           <a id="openChatGptSameTab" class="button-link" href="https://chatgpt.com/">当前页打开 ChatGPT</a>
         </div>
+        <label>粘贴外部核查结果
+          <textarea id="factResultText" class="fact-result" placeholder="把 ChatGPT / Perplexity 返回的核查结论、来源链接、最新数据或改写建议粘贴到这里。"></textarea>
+        </label>
+        <div class="fact-actions">
+          <button id="addFactCheckNote" class="primary">记录当前 scene 的核查结果</button>
+          <button id="exportFactCheckNotes">导出 fact_check_notes.json</button>
+          <button id="clearFactCheckNotes">清空核查记录</button>
+        </div>
         <div class="status" id="factStatus"></div>
       </section>
       <section class="panel grid">
@@ -454,7 +465,8 @@ def _html(payload: dict[str, Any]) -> str:
       data: null,
       scenes: [],
       currentSceneIndex: 0,
-      notes: []
+      notes: [],
+      factChecks: []
     }};
 
     const video = document.getElementById("video");
@@ -474,6 +486,7 @@ def _html(payload: dict[str, Any]) -> str:
     const severityEl = document.getElementById("severity");
     const noteTextEl = document.getElementById("noteText");
     const notesListEl = document.getElementById("notesList");
+    const factResultTextEl = document.getElementById("factResultText");
 
     state.data = embeddedData;
     state.scenes = embeddedData.scenes || [];
@@ -509,6 +522,14 @@ def _html(payload: dict[str, Any]) -> str:
     document.getElementById("openPerplexityFact").addEventListener("click", event => prepareFactLink(event, "perplexity"));
     document.getElementById("openGoogleFact").addEventListener("click", event => prepareFactLink(event, "google"));
     document.getElementById("openChatGptSameTab").addEventListener("click", event => prepareFactLink(event, "chatgpt"));
+    document.getElementById("addFactCheckNote").addEventListener("click", () => addFactCheckNote());
+    document.getElementById("exportFactCheckNotes").addEventListener("click", () => exportFactCheckNotes());
+    document.getElementById("clearFactCheckNotes").addEventListener("click", () => {{
+      if (confirm("Clear all fact-check notes?")) {{
+        state.factChecks = [];
+        factStatusEl.textContent = "已清空核查记录。";
+      }}
+    }});
 
     function sceneIndexAt(time) {{
       if (!state.scenes.length) return 0;
@@ -613,6 +634,48 @@ def _html(payload: dict[str, Any]) -> str:
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
       link.download = "alignment_notes.json";
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }}
+
+    function addFactCheckNote() {{
+      const scene = state.scenes[state.currentSceneIndex];
+      if (!scene) return;
+      const resultText = factResultTextEl.value.trim();
+      if (!resultText) {{
+        factStatusEl.textContent = "请先粘贴外部核查结果。";
+        return;
+      }}
+      const selected = selectedText();
+      const factCheck = {{
+        created_at: new Date().toISOString(),
+        time: Number(video.currentTime.toFixed(3)),
+        scene_id: scene.scene_id,
+        source_segment_id: scene.source_segment_id,
+        selected_text: selected,
+        checked_text: selected || scene.voiceover || scene.literal_translation || scene.source_text || "",
+        source_text: scene.source_text || "",
+        literal_translation: scene.literal_translation || "",
+        voiceover: scene.voiceover || "",
+        result_text: resultText,
+        prompt: buildFactPrompt()
+      }};
+      state.factChecks.push(factCheck);
+      factResultTextEl.value = "";
+      factStatusEl.textContent = `已记录 ${{state.factChecks.length}} 条核查结果。`;
+    }}
+
+    function exportFactCheckNotes() {{
+      const payload = {{
+        generated_at: new Date().toISOString(),
+        source_video: state.data?.video || "",
+        scene_plan: state.data?.scene_plan || "",
+        fact_checks: state.factChecks
+      }};
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {{ type: "application/json" }});
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "fact_check_notes.json";
       link.click();
       URL.revokeObjectURL(link.href);
     }}

@@ -234,3 +234,16 @@ Scope:
 Status:
 
 - done
+
+### Task 017: Fact Check Notes
+
+Scope:
+
+- let the review player record pasted external fact-check results for the current scene
+- export `fact_check_notes.json`
+- generate `fact_check_summary.json` and `fact_check_summary.md`
+- extract source links and suggest source-aware copy revision next steps
+
+Status:
+
+- done
