@@ -191,3 +191,19 @@ The current local review player is enough for Version 1 review. Later phases may
 - scene-level draft editor
 
 The UI should support real creative judgment rather than hiding everything behind one automatic button.
+
+## Direction 7: Low-Cost High-Quality TTS
+
+The first version uses `edge-tts` because it is free and good enough for drafts, but the voice quality should not define the final product.
+
+Future voice work should include:
+
+- a TTS provider abstraction
+- voice audition samples
+- Volcengine / Doubao TTS as the first paid Chinese-provider candidate
+- OpenAI and Azure as quality/reference candidates
+- optional Tencent and Alibaba provider tests
+- script cleanup before TTS to remove filler words and overly long sentences
+- later custom creator voice support with explicit consent and careful data handling
+
+See `docs/research/tts-provider-comparison.md`.

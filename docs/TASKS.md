@@ -309,5 +309,19 @@ These are product directions discussed after the Version 1 single-video workflow
 - Markdown and Notion-friendly export
 - direct Notion database sync in a later integration step
 - personal media library for original phone photos and videos, with AI-assisted tagging by time, place, visual type, quality, and possible topic use
+- low-cost high-quality TTS provider selection, including Volcengine / Doubao, OpenAI, Azure, Tencent, Alibaba, and optional custom creator voice
 
 See `docs/ROADMAP.md` for details.
+
+### Task 023: TTS Provider Research
+
+Scope:
+
+- compare free, cheap, and higher-quality TTS options for Chinese video narration
+- distinguish local transcription cost from generated voice cost
+- record official pricing and policy notes where available
+- recommend a later provider abstraction and voice audition workflow
+
+Status:
+
+- done
