@@ -298,3 +298,16 @@ Scope:
 Status:
 
 - done
+
+## Later Phase Directions
+
+These are product directions discussed after the Version 1 single-video workflow:
+
+- topic workspace for one theme across multiple reference videos, articles, and notes
+- multilingual source discovery and Chinese translation
+- claim matrix for repeated, differentiated, conflicting, accepted, and rejected viewpoints
+- Markdown and Notion-friendly export
+- direct Notion database sync in a later integration step
+- personal media library for original phone photos and videos, with AI-assisted tagging by time, place, visual type, quality, and possible topic use
+
+See `docs/ROADMAP.md` for details.

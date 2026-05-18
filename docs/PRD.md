@@ -185,6 +185,11 @@ Output:
 - complex transition editing
 - automatic copyright clearance
 - direct publishing to platforms
+- fully automated multilingual research workspace
+- Notion database sync
+- personal media asset library
+
+Later phases may add topic-level research, multi-source comparison, Notion export, and original media management. See `docs/ROADMAP.md`.
 
 ## Success Criteria
 
@@ -205,4 +210,3 @@ The output should be easy to inspect and manually improve.
 - Some source visuals may create copyright risk if published directly.
 - AI may over-rewrite unless prompts strongly enforce structure fidelity.
 - Generated narration may require manual review for factual accuracy.
-
