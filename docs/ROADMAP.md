@@ -82,6 +82,22 @@ The comparison should identify:
 
 This should remain user-guided. The tool can suggest sources and organize claims, but the creator decides what to trust and use.
 
+### Comment Insights
+
+For reference videos, useful information may live in the comments:
+
+- local corrections
+- expert corrections
+- personal experience
+- historical details
+- source recommendations
+- audience questions
+- emotional reactions
+
+Comments should be treated as leads, not final evidence. The tool should translate and classify useful comments, then add them to the topic workspace as candidate angles or fact-check leads.
+
+See `docs/tasks/task-026-topic-comment-insights.md`.
+
 ## Direction 3: Claim Matrix
 
 A topic-level claim matrix is central to multi-source creation.

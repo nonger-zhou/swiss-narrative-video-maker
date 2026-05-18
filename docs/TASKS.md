@@ -312,10 +312,24 @@ These are product directions discussed after the Version 1 single-video workflow
 - custom API provider settings and prompt templates for advanced users
 - personal media library for original phone photos and videos, with AI-assisted tagging by time, place, visual type, quality, and possible topic use
 - low-cost high-quality TTS provider selection, including Volcengine / Doubao, OpenAI, Azure, Tencent, Alibaba, and optional custom creator voice
+- comment insight extraction for reference videos, with comments treated as leads rather than final evidence
 
 See `docs/ROADMAP.md` for details.
 
 Creator-side setup prerequisites are tracked in `docs/USER_SETUP_CHECKLIST.md`.
+
+### Task 026: Topic Comment Insights
+
+Scope:
+
+- record how reference video comments can enrich topic research
+- classify useful comments as corrections, local experience, historical details, source recommendations, audience questions, and emotional reactions
+- connect comment insights to future topic workspace, claim matrix, source-aware scripting, and map-based visual planning
+- document the Swiss railway / Johnny Harris reference as an example deep-topic branch
+
+Status:
+
+- done
 
 ### Task 025: User Setup Checklist
 
