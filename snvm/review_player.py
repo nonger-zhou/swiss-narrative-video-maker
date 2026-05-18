@@ -312,6 +312,9 @@ def _html(payload: dict[str, Any]) -> str:
     textarea.fact-result {{
       min-height: 120px;
     }}
+    textarea.fact-focus {{
+      min-height: 76px;
+    }}
     textarea.script-editor {{
       min-height: 140px;
     }}
@@ -332,6 +335,25 @@ def _html(payload: dict[str, Any]) -> str:
       gap: 8px;
       max-height: 260px;
       overflow: auto;
+    }}
+    .fact-list {{
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 220px;
+      overflow: auto;
+      margin-top: 10px;
+    }}
+    .fact-item {{
+      border: 1px solid var(--line);
+      background: #fffdf8;
+      padding: 8px;
+      font-size: 13px;
+      line-height: 1.45;
+    }}
+    .fact-item button {{
+      margin-top: 6px;
+      padding: 6px 8px;
     }}
     .note {{
       border: 1px solid var(--line);
@@ -405,6 +427,14 @@ def _html(payload: dict[str, Any]) -> str:
       <section class="panel">
         <div class="label">事实核查</div>
         <div class="hint">可以先选中一句或一段文字，再点击下面的按钮。没有选中文字时，系统会使用当前 scene 的原文、忠实翻译和中文配音稿。</div>
+        <label>核查重点片段（可编辑）
+          <textarea id="factFocusText" class="fact-focus" placeholder="如果字幕断句太碎，可以把完整 claim 写在这里，例如：瑞士人每个月能存下约 1500 欧元。"></textarea>
+        </label>
+        <div class="fact-actions">
+          <button id="useSelectionAsFactFocus">使用选中文字</button>
+          <button id="useSceneAsFactFocus">使用当前 scene 中文稿</button>
+          <button id="clearFactFocus">清空重点片段</button>
+        </div>
         <div class="fact-actions">
           <button id="copyFactPrompt">复制核查 Prompt</button>
           <a id="openChatGptFact" class="button-link primary" href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">复制并新标签打开 ChatGPT</a>
@@ -421,6 +451,8 @@ def _html(payload: dict[str, Any]) -> str:
           <button id="clearFactCheckNotes">清空核查记录</button>
         </div>
         <div class="status" id="factStatus"></div>
+        <div class="label" style="margin-top: 12px;">当前 scene 已保存的核查结果</div>
+        <div class="fact-list" id="currentFactChecks"></div>
       </section>
       <section class="panel grid">
         <div>
@@ -533,6 +565,8 @@ def _html(payload: dict[str, Any]) -> str:
     const notesListEl = document.getElementById("notesList");
     const noteSaveStatusEl = document.getElementById("noteSaveStatus");
     const factResultTextEl = document.getElementById("factResultText");
+    const factFocusTextEl = document.getElementById("factFocusText");
+    const currentFactChecksEl = document.getElementById("currentFactChecks");
     const scriptEditTextEl = document.getElementById("scriptEditText");
     const scriptEditNoteEl = document.getElementById("scriptEditNote");
     const scriptEditStatusEl = document.getElementById("scriptEditStatus");
@@ -550,6 +584,7 @@ def _html(payload: dict[str, Any]) -> str:
     state.notes = loadSavedNotes();
     state.factChecks = loadSavedFactChecks();
     state.scriptEdits = loadSavedScriptEdits();
+    let lastFactFocusSceneId = null;
     video.src = embeddedData.video;
     statusEl.textContent = `${{state.scenes.length}} scenes loaded`;
     updateScene();
@@ -585,6 +620,17 @@ def _html(payload: dict[str, Any]) -> str:
     document.getElementById("openPerplexityFact").addEventListener("click", event => prepareFactLink(event, "perplexity"));
     document.getElementById("openGoogleFact").addEventListener("click", event => prepareFactLink(event, "google"));
     document.getElementById("openChatGptSameTab").addEventListener("click", event => prepareFactLink(event, "chatgpt"));
+    document.getElementById("useSelectionAsFactFocus").addEventListener("click", () => fillFactFocus("selection"));
+    document.getElementById("useSceneAsFactFocus").addEventListener("click", () => fillFactFocus("scene"));
+    document.getElementById("clearFactFocus").addEventListener("click", () => {{
+      factFocusTextEl.value = "";
+      factStatusEl.textContent = "已清空核查重点片段。";
+    }});
+    currentFactChecksEl.addEventListener("click", event => {{
+      const button = event.target.closest("button[data-fact-index]");
+      if (!button) return;
+      useFactCheckInScriptEdit(Number(button.dataset.factIndex));
+    }});
     document.getElementById("addFactCheckNote").addEventListener("click", () => addFactCheckNote());
     document.getElementById("exportFactCheckNotes").addEventListener("click", () => exportFactCheckNotes());
     document.getElementById("clearFactCheckNotes").addEventListener("click", () => {{
@@ -592,6 +638,7 @@ def _html(payload: dict[str, Any]) -> str:
         state.factChecks = [];
         saveReviewState();
         factStatusEl.textContent = "已清空核查记录。";
+        renderCurrentFactChecks();
       }}
     }});
     document.getElementById("saveScriptEdit").addEventListener("click", () => saveScriptEdit());
@@ -640,6 +687,11 @@ def _html(payload: dict[str, Any]) -> str:
       visualActionEl.textContent = scene.visual_action || "—";
       recommendationEl.textContent = scene.recommendation || "—";
       renderWarnings(scene.ai_warnings || []);
+      if (lastFactFocusSceneId !== scene.scene_id) {{
+        factFocusTextEl.value = "";
+        lastFactFocusSceneId = scene.scene_id;
+      }}
+      renderCurrentFactChecks();
       updateScriptEditor();
     }}
 
@@ -732,13 +784,15 @@ def _html(payload: dict[str, Any]) -> str:
         return;
       }}
       const selected = selectedText();
+      const focusText = factFocusTextEl.value.trim() || selected;
       const factCheck = {{
         created_at: new Date().toISOString(),
         time: Number(video.currentTime.toFixed(3)),
         scene_id: scene.scene_id,
         source_segment_id: scene.source_segment_id,
         selected_text: selected,
-        checked_text: scene.voiceover || scene.literal_translation || scene.source_text || selected || "",
+        focus_text: focusText,
+        checked_text: focusText || scene.voiceover || scene.literal_translation || scene.source_text || "",
         source_text: scene.source_text || "",
         literal_translation: scene.literal_translation || "",
         voiceover: scene.voiceover || "",
@@ -749,6 +803,7 @@ def _html(payload: dict[str, Any]) -> str:
       factResultTextEl.value = "";
       saveReviewState();
       factStatusEl.textContent = `已记录 ${{state.factChecks.length}} 条核查结果。`;
+      renderCurrentFactChecks();
     }}
 
     function exportFactCheckNotes() {{
@@ -826,6 +881,62 @@ def _html(payload: dict[str, Any]) -> str:
       scriptEditStatusEl.textContent = "已导出 script_edits.json。";
     }}
 
+    function fillFactFocus(mode) {{
+      const scene = state.scenes[state.currentSceneIndex];
+      if (!scene) return;
+      const selected = selectedText();
+      if (mode === "selection") {{
+        if (!selected) {{
+          factStatusEl.textContent = "还没有选中文字。";
+          return;
+        }}
+        factFocusTextEl.value = selected;
+        factStatusEl.textContent = "已把选中文字放入核查重点片段。";
+        return;
+      }}
+      factFocusTextEl.value = scene.voiceover || scene.literal_translation || scene.source_text || "";
+      factStatusEl.textContent = "已把当前 scene 中文稿放入核查重点片段，可继续手动补全。";
+    }}
+
+    function renderCurrentFactChecks() {{
+      const scene = state.scenes[state.currentSceneIndex];
+      if (!scene || !currentFactChecksEl) return;
+      currentFactChecksEl.innerHTML = "";
+      const checks = state.factChecks
+        .map((item, index) => ({{ item, index }}))
+        .filter(entry => entry.item.scene_id === scene.scene_id);
+      if (!checks.length) {{
+        currentFactChecksEl.textContent = "当前 scene 还没有保存核查结果。";
+        return;
+      }}
+      checks.forEach(entry => {{
+        const item = document.createElement("div");
+        item.className = "fact-item";
+        const focus = entry.item.focus_text || entry.item.selected_text || entry.item.checked_text || "(未记录重点片段)";
+        const result = entry.item.result_text || "";
+        item.innerHTML = [
+          `<strong>${{escapeHtml(focus)}}</strong>`,
+          `<div>${{escapeHtml(result.slice(0, 260))}}${{result.length > 260 ? "..." : ""}}</div>`,
+          `<button type="button" data-fact-index="${{entry.index}}">带入文稿编辑说明</button>`
+        ].join("");
+        currentFactChecksEl.appendChild(item);
+      }});
+    }}
+
+    function useFactCheckInScriptEdit(index) {{
+      const factCheck = state.factChecks[index];
+      if (!factCheck) return;
+      const addition = [
+        "事实核查结果：",
+        factCheck.focus_text || factCheck.checked_text || "",
+        factCheck.result_text || ""
+      ].filter(Boolean).join("\\n");
+      scriptEditNoteEl.value = [scriptEditNoteEl.value.trim(), addition].filter(Boolean).join("\\n\\n");
+      document.getElementById("intentFactFix").checked = true;
+      document.getElementById("intentNeedsSource").checked = true;
+      scriptEditStatusEl.textContent = "已把核查结果带入文稿编辑说明，并标记为事实修正/需要来源。";
+    }}
+
     async function copyFactPrompt() {{
       const prompt = buildFactPrompt();
       const copied = await copyText(prompt);
@@ -848,7 +959,7 @@ def _html(payload: dict[str, Any]) -> str:
 
     function buildFactPrompt() {{
       const scene = state.scenes[state.currentSceneIndex] || {{}};
-      const selected = selectedText();
+      const focusText = factFocusTextEl.value.trim() || selectedText();
       const fullContext = [
         scene.source_text ? `原文 transcript：\\n${{scene.source_text}}` : "",
         scene.literal_translation ? `忠实中文翻译：\\n${{scene.literal_translation}}` : "",
@@ -869,8 +980,8 @@ def _html(payload: dict[str, Any]) -> str:
         `Scene：${{scene.scene_id || "unknown"}}`,
         `时间：${{fmt(scene.start_time)}} - ${{fmt(scene.end_time)}}`,
         "",
-        "我选中的重点片段：",
-        selected || "(没有选中文本，请核查完整 scene 上下文)",
+        "我想重点核查的片段：",
+        focusText || "(没有指定重点片段，请核查完整 scene 上下文)",
         "",
         "完整 scene 上下文：",
         fullContext || "(当前 scene 没有可用文本)"

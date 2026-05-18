@@ -208,6 +208,8 @@ The player also shows a three-column text comparison for the current scene:
 
 For fact checking, select any sentence in the player and use the fact-check buttons. The player can copy a prepared verification prompt or open ChatGPT, Perplexity, or Google with the current scene context. The prompt asks for source links, publication year, data definitions, and safer rewrite suggestions when a claim is too absolute.
 
+If a subtitle break splits one factual claim across two captions, use the editable fact-check focus box to write the complete claim first. Saved fact-check results are shown under the current scene and can be copied into the script-edit note as source-aware revision context.
+
 After checking a claim in an external tool, paste the returned answer back into the review player and record it for the current scene. Export `fact_check_notes.json`, then summarize it:
 
 ```powershell

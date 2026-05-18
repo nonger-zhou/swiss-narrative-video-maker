@@ -273,3 +273,16 @@ Scope:
 Status:
 
 - done
+
+### Task 020: Fact Check Revision Bridge
+
+Scope:
+
+- add an editable fact-check focus field for claims split across subtitle lines
+- show saved fact-check results for the current scene inside the review player
+- let the creator carry a saved fact-check result into the script edit note
+- mark carried fact-check context as fact fix and source-needed without automatically rewriting copy
+
+Status:
+
+- done
