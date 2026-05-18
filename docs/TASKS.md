@@ -286,3 +286,15 @@ Scope:
 Status:
 
 - done
+
+### Task 021: Scene Rewrite Prompts
+
+Scope:
+
+- add scene-level rewrite prompt shortcuts to the review player
+- include original transcript, literal translation, current Chinese voiceover, timing guidance, warnings, and saved fact checks
+- keep AI rewriting external and user-approved before saving script edits
+
+Status:
+
+- done

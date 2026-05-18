@@ -475,6 +475,10 @@ def _html(payload: dict[str, Any]) -> str:
       <section class="panel">
         <div class="label">文稿编辑</div>
         <div class="hint">轻度/中度修改：不重排 scene，只修改当前 scene 的最终中文文稿。保存后可导出 script_edits.json，再应用并重新生成配音。</div>
+        <div class="fact-actions">
+          <button id="copyRewritePrompt">复制当前 scene 改写 Prompt</button>
+          <a id="openRewriteChatGpt" class="button-link" href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">复制并新标签打开 ChatGPT 改写</a>
+        </div>
         <label>当前 scene 最终中文文稿
           <textarea id="scriptEditText" class="script-editor"></textarea>
         </label>
@@ -644,6 +648,8 @@ def _html(payload: dict[str, Any]) -> str:
     document.getElementById("saveScriptEdit").addEventListener("click", () => saveScriptEdit());
     document.getElementById("resetScriptEdit").addEventListener("click", () => resetScriptEditor());
     document.getElementById("exportScriptEdits").addEventListener("click", () => exportScriptEdits());
+    document.getElementById("copyRewritePrompt").addEventListener("click", () => copyRewritePrompt());
+    document.getElementById("openRewriteChatGpt").addEventListener("click", event => prepareRewriteLink(event));
     document.getElementById("clearScriptEdits").addEventListener("click", () => {{
       if (confirm("Clear all script edits?")) {{
         state.scriptEdits = [];
@@ -935,6 +941,75 @@ def _html(payload: dict[str, Any]) -> str:
       document.getElementById("intentFactFix").checked = true;
       document.getElementById("intentNeedsSource").checked = true;
       scriptEditStatusEl.textContent = "已把核查结果带入文稿编辑说明，并标记为事实修正/需要来源。";
+    }}
+
+    async function copyRewritePrompt() {{
+      const prompt = buildRewritePrompt();
+      const copied = await copyText(prompt);
+      scriptEditStatusEl.textContent = copied
+        ? "已复制当前 scene 改写 Prompt。"
+        : "复制失败，请手动复制。";
+    }}
+
+    async function prepareRewriteLink(event) {{
+      const prompt = buildRewritePrompt();
+      event.currentTarget.href = "https://chatgpt.com/";
+      const copied = await copyText(prompt);
+      scriptEditStatusEl.textContent = copied
+        ? "已复制改写 Prompt。ChatGPT 打开后，请粘贴并发送，再把满意版本粘回文稿编辑框。"
+        : "ChatGPT 会打开，但复制失败；请改用复制按钮。";
+    }}
+
+    function buildRewritePrompt() {{
+      const scene = state.scenes[state.currentSceneIndex] || {{}};
+      const factContext = sceneFactCheckContext(scene.scene_id);
+      const warnings = (scene.ai_warnings || [])
+        .map(warning => `- ${{warning.type || "warning"}}: ${{warning.message || ""}}`)
+        .join("\\n");
+      return [
+        "请帮我对这个视频 scene 的中文配音稿做轻度/中度改写。",
+        "",
+        "要求：",
+        "1. 不改变 scene 顺序，不新增大段结构，不把下一段内容提前；",
+        "2. 保留原视频的信息顺序和叙事功能；",
+        "3. 可以压缩过长句子、去掉无意义重复、补充原文说得不清楚但对中文观众必要的短解释；",
+        "4. 如果事实核查结果指出数据过时、不准或口径不明，请优先给出更稳妥的中文说法；",
+        "5. 输出一个可直接作为中文配音的版本，语气自然，不要写解释性标题；",
+        "6. 如果无法确认事实，请用更保守的表达，不要编造新数字。",
+        "",
+        `Scene：${{scene.scene_id || "unknown"}}`,
+        `时间：${{fmt(scene.start_time)}} - ${{fmt(scene.end_time)}}`,
+        `叙事功能：${{scene.narrative_role || ""}}`,
+        `Timing 建议：${{scene.timing_action || ""}} ${{scene.recommendation || ""}}`,
+        "",
+        "原文 transcript：",
+        scene.source_text || "(无)",
+        "",
+        "忠实中文翻译：",
+        scene.literal_translation || scene.translated_text || "(无)",
+        "",
+        "当前中文配音稿：",
+        scriptEditTextEl.value.trim() || scene.voiceover || "(无)",
+        "",
+        "AI warnings：",
+        warnings || "(无)",
+        "",
+        "已保存的事实核查结果：",
+        factContext || "(无)",
+        "",
+        "请只输出改写后的中文配音稿。"
+      ].join("\\n");
+    }}
+
+    function sceneFactCheckContext(sceneId) {{
+      return state.factChecks
+        .filter(item => item.scene_id === sceneId)
+        .map((item, index) => [
+          `#${{index + 1}}`,
+          item.focus_text || item.checked_text || item.selected_text || "",
+          item.result_text || ""
+        ].filter(Boolean).join("\\n"))
+        .join("\\n\\n");
     }}
 
     async function copyFactPrompt() {{

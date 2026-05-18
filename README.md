@@ -246,6 +246,8 @@ python -m snvm review-player
 
 Script edits keep the original scene order. They are for compressing, deduplicating, correcting facts, adding short explanations, and making the Chinese voiceover more natural before regenerating audio and subtitles.
 
+The script editor can also copy a scene-level rewrite prompt for external AI tools. The prompt includes the original transcript, literal Chinese translation, current voiceover, timing recommendation, AI warnings, and saved fact-check results for that scene. The returned rewrite is not applied automatically; paste the preferred version into the script editor and save it.
+
 To rebuild the reviewed draft after script edits, run:
 
 ```powershell
