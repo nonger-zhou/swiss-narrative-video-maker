@@ -315,6 +315,20 @@ These are product directions discussed after the Version 1 single-video workflow
 
 See `docs/ROADMAP.md` for details.
 
+Creator-side setup prerequisites are tracked in `docs/USER_SETUP_CHECKLIST.md`.
+
+### Task 025: User Setup Checklist
+
+Scope:
+
+- document user-side setup decisions for cloud photo sync, media inbox, Notion, TTS, and future media library workflows
+- record when the assistant should remind the user to complete a prerequisite before continuing
+- describe the intended material replacement workflow from media library thumbnail to downloaded original asset
+
+Status:
+
+- done
+
 ### Task 024: Knowledge Base And Prompt Notes
 
 Scope:

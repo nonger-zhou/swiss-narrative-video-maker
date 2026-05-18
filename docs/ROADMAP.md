@@ -2,6 +2,8 @@
 
 This roadmap records product directions discussed during development. These ideas are not all Version 1 scope. They describe later phases after the single-video draft workflow becomes stable.
 
+For creator-side setup items and prerequisites, see `docs/USER_SETUP_CHECKLIST.md`.
+
 ## Current Core
 
 The current product is a single-reference-video workflow:
