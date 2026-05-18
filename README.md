@@ -135,6 +135,7 @@ python -m snvm review-player
 python -m snvm revision-plan
 python -m snvm fact-check-summary
 python -m snvm apply-script-edits
+python -m snvm refresh-draft
 python -m snvm make-draft "C:\path\to\video.mp4"
 ```
 
@@ -242,3 +243,15 @@ python -m snvm review-player
 ```
 
 Script edits keep the original scene order. They are for compressing, deduplicating, correcting facts, adding short explanations, and making the Chinese voiceover more natural before regenerating audio and subtitles.
+
+To rebuild the reviewed draft after script edits, run:
+
+```powershell
+python -m snvm refresh-draft
+```
+
+This applies `script_edits.json` when present, regenerates `voiceover.mp3`, regenerates `timing_plan.json`, composes `final_scenes.mp4`, and regenerates `review_player.html`. Preview the planned steps without running TTS or ffmpeg:
+
+```powershell
+python -m snvm refresh-draft --dry-run
+```

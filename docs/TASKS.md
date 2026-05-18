@@ -260,3 +260,16 @@ Scope:
 Status:
 
 - done
+
+### Task 019: Refresh Draft Command
+
+Scope:
+
+- add one command that applies script edits and regenerates downstream draft outputs
+- rebuild voiceover, timing plan, scene-based video, and review player in the correct order
+- auto-detect optional script edits and visual replacement manifests
+- provide a dry-run mode so the creator can inspect planned steps first
+
+Status:
+
+- done

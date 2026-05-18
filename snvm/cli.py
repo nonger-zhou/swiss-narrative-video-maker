@@ -109,6 +109,20 @@ def main(argv: list[str] | None = None) -> int:
             args.output,
         )
 
+    if args.command == "refresh-draft":
+        return run_refresh_draft(
+            args.source,
+            args.scene_plan,
+            args.script_edits,
+            args.visual_replacements,
+            args.output,
+            args.voice,
+            args.skip_script_edits,
+            args.skip_compose,
+            args.skip_review_player,
+            args.dry_run,
+        )
+
     if args.command == "make-draft":
         return run_make_draft(args.input, args.output)
 
@@ -537,6 +551,67 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory for generated files.",
     )
 
+    refresh_parser = subparsers.add_parser(
+        "refresh-draft",
+        help="Apply edits and regenerate voiceover, timing, scene draft, and review player.",
+    )
+    refresh_parser.add_argument(
+        "--source",
+        type=Path,
+        default=None,
+        help="Source video. Defaults to <output>/source.mp4.",
+    )
+    refresh_parser.add_argument(
+        "--scene-plan",
+        type=Path,
+        default=None,
+        help="Base scene plan. Defaults to <output>/scene_plan.reviewed.json if present, else <output>/scene_plan.json.",
+    )
+    refresh_parser.add_argument(
+        "--script-edits",
+        type=Path,
+        default=None,
+        help="Optional script edits JSON. Defaults to <output>/script_edits.json if present.",
+    )
+    refresh_parser.add_argument(
+        "--visual-replacements",
+        type=Path,
+        default=None,
+        help="Optional visual replacement manifest. Defaults to <output>/visual_replacements.json if present.",
+    )
+    refresh_parser.add_argument(
+        "--voice",
+        default=None,
+        help="Edge TTS voice. Defaults to EDGE_TTS_VOICE from .env.",
+    )
+    refresh_parser.add_argument(
+        "--skip-script-edits",
+        action="store_true",
+        help="Do not apply script_edits.json before rebuilding.",
+    )
+    refresh_parser.add_argument(
+        "--skip-compose",
+        action="store_true",
+        help="Regenerate script-dependent audio and timing, but skip video composition.",
+    )
+    refresh_parser.add_argument(
+        "--skip-review-player",
+        action="store_true",
+        help="Do not regenerate review_player.html.",
+    )
+    refresh_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the planned rebuild steps without running TTS or ffmpeg.",
+    )
+    refresh_parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("output"),
+        help="Directory for generated files.",
+    )
+
     draft_parser = subparsers.add_parser(
         "make-draft",
         help="Run the basic pipeline from source input to final draft video.",
@@ -907,6 +982,119 @@ def run_apply_script_edits(
 
     print("Script edits applied.")
     print(f"- Scene plan: {reviewed_scene_plan}")
+    return 0
+
+
+def run_refresh_draft(
+    source_path: Path | None,
+    scene_plan_path: Path | None,
+    script_edits_path: Path | None,
+    visual_replacements_path: Path | None,
+    output_dir: Path,
+    voice: str | None,
+    skip_script_edits: bool,
+    skip_compose: bool,
+    skip_review_player: bool,
+    dry_run: bool,
+) -> int:
+    settings = load_settings()
+    source = source_path or output_dir / "source.mp4"
+    default_reviewed = output_dir / "scene_plan.reviewed.json"
+    base_scene_plan = scene_plan_path or (
+        default_reviewed if default_reviewed.exists() else output_dir / "scene_plan.json"
+    )
+    default_script_edits = output_dir / "script_edits.json"
+    script_edits = script_edits_path or (
+        default_script_edits if default_script_edits.exists() else None
+    )
+    default_replacements = output_dir / "visual_replacements.json"
+    visual_replacements = visual_replacements_path or (
+        default_replacements if default_replacements.exists() else None
+    )
+    selected_voice = voice or settings.edge_tts_voice
+    scene_plan_after_edits = output_dir / "scene_plan.reviewed.json"
+    scene_plan = (
+        scene_plan_after_edits
+        if script_edits and not skip_script_edits
+        else base_scene_plan
+    )
+    timing_plan = output_dir / "timing_plan.json"
+    voiceover = output_dir / "voiceover.mp3"
+    final_video = output_dir / "final_scenes.mp4"
+
+    if dry_run:
+        print("Refresh draft plan:")
+        if script_edits and not skip_script_edits:
+            print(f"- Apply script edits: {script_edits} -> {scene_plan_after_edits}")
+        elif skip_script_edits:
+            print("- Skip script edits.")
+        else:
+            print("- No script_edits.json found; use existing scene plan.")
+        print(f"- Scene plan: {scene_plan}")
+        print(f"- Generate voiceover: {voiceover} (voice: {selected_voice})")
+        print(f"- Generate timing plan: {timing_plan}")
+        if skip_compose:
+            print("- Skip scene-based video composition.")
+        else:
+            print(f"- Compose scene draft: {final_video}")
+            if visual_replacements:
+                print(f"- Use visual replacements: {visual_replacements}")
+        if skip_review_player:
+            print("- Skip review player generation.")
+        else:
+            print("- Generate review player HTML.")
+        return 0
+
+    try:
+        if script_edits and not skip_script_edits:
+            print("Running step: apply-script-edits")
+            scene_plan = apply_script_edits(base_scene_plan, script_edits, output_dir)
+        elif script_edits and skip_script_edits:
+            print("Skipping script edits.")
+        else:
+            print("No script_edits.json found; using existing scene plan.")
+
+        print("Running step: voiceover")
+        voiceover = generate_voiceover(scene_plan, output_dir, selected_voice)
+
+        print("Running step: timing-plan")
+        timing_plan = generate_timing_plan(scene_plan, output_dir)
+
+        video_for_player = output_dir / "final.mp4"
+        if not skip_compose:
+            print("Running step: compose-scenes")
+            video_for_player = compose_scene_based_draft(
+                source,
+                scene_plan,
+                timing_plan,
+                voiceover,
+                output_dir,
+                visual_replacements,
+            )
+        elif final_video.exists():
+            video_for_player = final_video
+
+        if not skip_review_player:
+            print("Running step: review-player")
+            generate_review_player(
+                video_for_player,
+                scene_plan,
+                timing_plan,
+                output_dir / "scene_review.json",
+                output_dir,
+            )
+    except SnvmError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print("Draft refresh complete.")
+    print(f"- Scene plan: {scene_plan}")
+    print(f"- Voiceover: {voiceover}")
+    print(f"- Timing plan: {timing_plan}")
+    if not skip_compose:
+        print(f"- Video: {video_for_player}")
+    if not skip_review_player:
+        print(f"- Review player: {output_dir / 'review_player.html'}")
     return 0
 
 
