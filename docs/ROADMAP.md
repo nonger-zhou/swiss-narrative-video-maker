@@ -120,10 +120,34 @@ Markdown export is the simplest first step:
 - one Markdown file per topic summary
 - one Markdown claim matrix
 
-Notion support can come in two levels:
+Obsidian and Notion solve related but different problems.
+
+Obsidian is closest to a local Markdown knowledge base:
+
+- content is stored as local `.md` files
+- easy for a tool to export
+- good for long-term text archives, backlinks, tags, and offline work
+- less strong as a visual database or workflow dashboard
+
+Notion is closer to a database plus page workspace:
+
+- good for topics, statuses, tags, platforms, languages, and creator decisions
+- good for table, board, calendar, and filtered views
+- easy for the creator to browse and manage
+- long text should live in page bodies rather than database properties
+- direct sync requires Notion API setup and permissions
+
+The recommended architecture is not either/or:
+
+1. Always export local Markdown and JSON as the durable archive.
+2. Optionally generate Notion-friendly Markdown for manual import.
+3. Later add direct Notion database sync for users who configure it.
+
+Notion support can come in three levels:
 
 1. Notion-friendly Markdown export that the creator can paste or import manually.
-2. Direct Notion database sync through the Notion API.
+2. A documented Notion database schema.
+3. Direct Notion database sync through the Notion API.
 
 For Notion, the database should act as an index, while long text should live in page bodies.
 
@@ -150,6 +174,52 @@ Page body content can include:
 - fact risks
 - rewrite notes
 - final script excerpts
+
+## Direction 4.1: Custom API And Prompt Templates
+
+Some competing tools let users configure their own API and prompts. This usually means:
+
+- the user can choose which AI provider to call, such as OpenAI, Volcengine, Alibaba, Tencent, or another compatible model API
+- the user can paste their own API key instead of relying on the tool author's account
+- the user can define prompt templates for different tasks
+
+Prompt templates are reusable instructions sent to the AI model. In this product, possible templates include:
+
+- structure analysis prompt
+- faithful Chinese translation prompt
+- Chinese voiceover rewrite prompt
+- short-video hook analysis prompt
+- fact-check prompt
+- topic-level claim matrix prompt
+- Notion summary prompt
+- visual replacement suggestion prompt
+
+The value is flexibility. Different creators have different styles, platforms, and risk tolerance. A prompt template system would let the creator tune output without changing code.
+
+Recommended future design:
+
+```text
+prompts/
+  analyze_structure.md
+  rewrite_voiceover.md
+  fact_check.md
+  topic_claim_matrix.md
+  notion_summary.md
+```
+
+Each prompt can use placeholders:
+
+```text
+{{ transcript }}
+{{ literal_translation }}
+{{ voiceover }}
+{{ topic }}
+{{ creator_note }}
+```
+
+The tool fills placeholders with the current source data before calling the selected AI provider.
+
+This should be added carefully. The default prompts should remain good enough for non-technical users, while advanced users can override them.
 
 ## Direction 5: Light Reference Saving, Heavy Original Media Management
 

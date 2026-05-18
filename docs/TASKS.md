@@ -308,10 +308,25 @@ These are product directions discussed after the Version 1 single-video workflow
 - claim matrix for repeated, differentiated, conflicting, accepted, and rejected viewpoints
 - Markdown and Notion-friendly export
 - direct Notion database sync in a later integration step
+- Obsidian-style local Markdown archive as the durable source of truth
+- custom API provider settings and prompt templates for advanced users
 - personal media library for original phone photos and videos, with AI-assisted tagging by time, place, visual type, quality, and possible topic use
 - low-cost high-quality TTS provider selection, including Volcengine / Doubao, OpenAI, Azure, Tencent, Alibaba, and optional custom creator voice
 
 See `docs/ROADMAP.md` for details.
+
+### Task 024: Knowledge Base And Prompt Notes
+
+Scope:
+
+- compare Notion and Obsidian-style workflows
+- document a staged Notion integration path
+- explain custom API provider settings and prompt templates
+- keep local Markdown and JSON as durable export formats
+
+Status:
+
+- done
 
 ### Task 023: TTS Provider Research
 
